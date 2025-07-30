@@ -1,0 +1,24 @@
+# Quick start
+start_autovrs_ai.bat
+
+# Or manual start
+cd AutoVRS-Backend
+.\autovrs-env\Scripts\Activate.ps1
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload-dir app
+
+# In another terminal
+cd APPAutoVRS
+flutter pub get
+flutter run -d windows
+
+# Các thay đổi đã thực hiện:
+# 1. Xóa giao diện AI VRS Manual riêng biệt
+# 2. Tích hợp chức năng AI vào giao diện VRS thủ công
+# 3. Thêm nút "Chọn ảnh" và "Chẩn đoán" vào VRS thủ công
+# 4. Khi chẩn đoán, AI sẽ sử dụng model từ: C:\Users\sonng\OneDrive\Desktop\Code\Front-end-AutoVRS\best.onnx
+# 5. Kết quả AI sẽ hiển thị bounding box trực tiếp trên ảnh trong giao diện VRS thủ công
+# 6. THIẾT KẾ MỚI: Tất cả view ảnh đều có dạng hình vuông
+#    - VRS chính: Hình vuông lớn bên trái với AI detection
+#    - 2 view tham chiếu: Gerber và PCI AOI (hình vuông nhỏ bên phải, xếp dọc)
+#    - Home screen: 2 view vuông cho Gerber và AOI
+# 7. Sửa lỗi bounding box vẽ ra ngoài vùng ảnh (relative coordinates 0-1)
