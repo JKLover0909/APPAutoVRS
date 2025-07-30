@@ -26,11 +26,6 @@ class HomeScreen extends StatelessWidget {
 
           // Quick Actions
           _buildQuickActions(context),
-
-          const SizedBox(height: 24),
-
-          // Recent Activity
-          _buildRecentActivity(context),
         ],
       ),
     );
@@ -296,90 +291,6 @@ class HomeScreen extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildRecentActivity(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Hoạt động gần đây',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 16),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                _buildActivityItem(
-                  'Hệ thống khởi động thành công',
-                  'Vừa xong',
-                  FeatherIcons.checkCircle,
-                  Colors.green,
-                ),
-                const Divider(),
-                _buildActivityItem(
-                  'Model mới được thêm vào',
-                  '2 giờ trước',
-                  FeatherIcons.plus,
-                  Colors.blue,
-                ),
-                const Divider(),
-                _buildActivityItem(
-                  'Kiểm tra chất lượng hoàn tất',
-                  '4 giờ trước',
-                  FeatherIcons.eye,
-                  Colors.orange,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildActivityItem(
-    String title,
-    String time,
-    IconData icon,
-    Color color,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: color, size: 16),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w500,
-                    fontSize: 14,
-                  ),
-                ),
-                Text(
-                  time,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

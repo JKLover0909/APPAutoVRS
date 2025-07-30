@@ -17,11 +17,11 @@ class VRSMainScreen extends StatelessWidget {
           // Image Display Panel
           Expanded(
             flex: 3,
-            child: Column(
+            child: Row(
               children: [
-                // Main VRS Image
+                // Main VRS Image - Left side
                 Expanded(
-                  flex: 2,
+                  flex: 2, // Increased from 1 to 2 for wider camera view
                   child: Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
@@ -37,39 +37,42 @@ class VRSMainScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 12),
                           Expanded(
-                            child: Container(
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                color: Colors.black,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Stack(
-                                children: [
-                                  const Center(
-                                    child: Text(
-                                      'Live VRS Image',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 18,
-                                      ),
-                                    ),
-                                  ),
-                                  // Defect highlight box
-                                  Positioned(
-                                    left: 100,
-                                    top: 80,
-                                    child: Container(
-                                      width: 80,
-                                      height: 60,
-                                      decoration: BoxDecoration(
-                                        border: Border.all(
-                                          color: Colors.red,
-                                          width: 2,
+                            child: AspectRatio(
+                              aspectRatio: 1.0, // Square aspect ratio
+                              child: Container(
+                                width: double.infinity,
+                                decoration: BoxDecoration(
+                                  color: Colors.black,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Stack(
+                                  children: [
+                                    const Center(
+                                      child: Text(
+                                        'Live VRS Image',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 18,
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ],
+                                    // Defect highlight box
+                                    Positioned(
+                                      left: 100,
+                                      top: 80,
+                                      child: Container(
+                                        width: 80,
+                                        height: 60,
+                                        decoration: BoxDecoration(
+                                          border: Border.all(
+                                            color: Colors.red,
+                                            width: 2,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -79,12 +82,12 @@ class VRSMainScreen extends StatelessWidget {
                   ),
                 ),
 
-                const SizedBox(height: 16),
+                const SizedBox(width: 16),
 
-                // Comparison Images
+                // Comparison Images - Right side (stacked)
                 Expanded(
                   flex: 1,
-                  child: Row(
+                  child: Column(
                     children: [
                       // Gerber View
                       Expanded(
@@ -102,39 +105,42 @@ class VRSMainScreen extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(height: 8),
-                                Expanded(
-                                  child: Container(
-                                    width: double.infinity,
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade700,
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Stack(
-                                      children: [
-                                        const Center(
-                                          child: Text(
-                                            'Gerber View',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ),
-                                        Positioned(
-                                          left: 40,
-                                          top: 30,
-                                          child: Container(
-                                            width: 30,
-                                            height: 20,
-                                            decoration: BoxDecoration(
-                                              border: Border.all(
-                                                color: Colors.yellow,
-                                                width: 1,
+                                Flexible(
+                                  child: AspectRatio(
+                                    aspectRatio: 1.0, // Square aspect ratio
+                                    child: Container(
+                                      width: double.infinity,
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade700,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Stack(
+                                        children: [
+                                          const Center(
+                                            child: Text(
+                                              'Gerber View',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 12,
                                               ),
                                             ),
                                           ),
-                                        ),
-                                      ],
+                                          Positioned(
+                                            left: 40,
+                                            top: 30,
+                                            child: Container(
+                                              width: 30,
+                                              height: 20,
+                                              decoration: BoxDecoration(
+                                                border: Border.all(
+                                                  color: Colors.yellow,
+                                                  width: 1,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -144,7 +150,7 @@ class VRSMainScreen extends StatelessWidget {
                         ),
                       ),
 
-                      const SizedBox(width: 16),
+                      const SizedBox(height: 16),
 
                       // AOI Capture
                       Expanded(
@@ -162,39 +168,42 @@ class VRSMainScreen extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(height: 8),
-                                Expanded(
-                                  child: Container(
-                                    width: double.infinity,
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade200,
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Stack(
-                                      children: [
-                                        const Center(
-                                          child: Text(
-                                            'AOI Capture',
-                                            style: TextStyle(
-                                              color: Colors.black,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ),
-                                        Positioned(
-                                          left: 40,
-                                          top: 30,
-                                          child: Container(
-                                            width: 30,
-                                            height: 20,
-                                            decoration: BoxDecoration(
-                                              border: Border.all(
-                                                color: Colors.blue,
-                                                width: 1,
+                                Flexible(
+                                  child: AspectRatio(
+                                    aspectRatio: 1.0, // Square aspect ratio
+                                    child: Container(
+                                      width: double.infinity,
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade200,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Stack(
+                                        children: [
+                                          const Center(
+                                            child: Text(
+                                              'AOI Capture',
+                                              style: TextStyle(
+                                                color: Colors.black,
+                                                fontSize: 12,
                                               ),
                                             ),
                                           ),
-                                        ),
-                                      ],
+                                          Positioned(
+                                            left: 40,
+                                            top: 30,
+                                            child: Container(
+                                              width: 30,
+                                              height: 20,
+                                              decoration: BoxDecoration(
+                                                border: Border.all(
+                                                  color: Colors.blue,
+                                                  width: 1,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
