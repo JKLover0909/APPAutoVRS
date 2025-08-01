@@ -3,7 +3,7 @@ start_autovrs_ai.bat
 
 # Or manual start
 cd AutoVRS-Backend
-.\autovrs-env\Scripts\Activate.ps1
+.venv\Scripts\Activate.ps1
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload-dir app
 
 # In another terminal

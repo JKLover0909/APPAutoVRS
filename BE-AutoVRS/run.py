@@ -13,10 +13,10 @@ def main():
     print("=" * 50)
     
     # Check if virtual environment exists
-    venv_path = "venv"
+    venv_path = "venv_new"
     if not os.path.exists(venv_path):
         print("📦 Virtual environment not found. Creating...")
-        subprocess.run([sys.executable, "-m", "venv", venv_path])
+        subprocess.run([sys.executable, "-m", "venv_new", venv_path])
         print("✅ Virtual environment created")
     
     # Determine activation script
