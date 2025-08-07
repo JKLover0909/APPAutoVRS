@@ -3,7 +3,6 @@ import 'package:flutter_feather_icons/flutter_feather_icons.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../services/autovrs_websocket_service.dart';
 
 class VRSMainScreen extends StatelessWidget {
   const VRSMainScreen({super.key});

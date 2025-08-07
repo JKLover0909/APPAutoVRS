@@ -8,12 +8,12 @@ class DetectionOverlayWidget extends StatelessWidget {
   final double height;
 
   const DetectionOverlayWidget({
-    Key? key,
+    super.key,
     required this.imageData,
     required this.detections,
     required this.width,
     required this.height,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

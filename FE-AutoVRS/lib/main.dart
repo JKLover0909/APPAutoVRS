@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'dart:io';
 
 import 'core/app_theme.dart';
 import 'core/routes.dart';
@@ -13,8 +14,25 @@ import 'providers/statistics_provider.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Hive
-  await Hive.initFlutter();
+  // Initialize Hive with fallback for Windows
+  try {
+    if (Platform.isWindows) {
+      // Use a local directory for Windows to avoid path_provider issues
+      final directory = Directory.current;
+      await Hive.initFlutter('${directory.path}/hive_data');
+    } else {
+      await Hive.initFlutter();
+    }
+  } catch (e) {
+    // Final fallback to default initialization
+    print('Warning: Could not initialize Hive with custom path, using default: $e');
+    try {
+      await Hive.initFlutter();
+    } catch (e2) {
+      print('Error initializing Hive: $e2');
+      // Continue without Hive if it fails completely
+    }
+  }
 
   runApp(const AutoVRSApp());
 }

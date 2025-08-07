@@ -1,10 +1,10 @@
 # Quick start
 start_autovrs_ai.bat
 
-# Or manual start
-cd AutoVRS-Backend
-.venv\Scripts\Activate.ps1
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload-dir app
+# Or manual start with Conda
+conda activate autovrs
+cd BE-AutoVRS
+python main.py
 
 # In another terminal
 cd APPAutoVRS
