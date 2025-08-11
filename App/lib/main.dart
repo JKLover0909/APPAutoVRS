@@ -12,6 +12,7 @@ import 'providers/auth_provider.dart';
 import 'providers/vrs_provider.dart';
 import 'providers/statistics_provider.dart';
 import 'services/flutter_camera_service.dart';
+import 'services/autovrs_websocket_service.dart';
 import 'services/local_database_service.dart';
 import 'services/database_seeder.dart';
 
@@ -43,15 +44,14 @@ void main() async {
     final dbService = LocalDatabaseService();
     final dbPath = await dbService.databasePath;
     print('SQLite database path: $dbPath');
-    
+
     // Initialize database connection
     await dbService.database;
     print('Database initialized successfully');
-    
+
     // Seed database with sample data
     final seeder = DatabaseSeeder();
     await seeder.seedDatabase();
-    
   } catch (e) {
     print('Warning: Database initialization failed: $e');
     print('App will continue without local database');
@@ -72,6 +72,7 @@ class AutoVRSApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => VRSProvider()),
         ChangeNotifierProvider(create: (_) => StatisticsProvider()),
         ChangeNotifierProvider(create: (_) => FlutterCameraService()),
+        ChangeNotifierProvider(create: (_) => AutoVRSWebSocketService()),
       ],
       child: Consumer<NavigationProvider>(
         builder: (context, navigationProvider, child) {

@@ -3,7 +3,7 @@ import 'package:flutter_feather_icons/flutter_feather_icons.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../widgets/video_frame_widget.dart';
+import '../../services/autovrs_websocket_service.dart';
 
 class VRSMainScreen extends StatelessWidget {
   const VRSMainScreen({super.key});
@@ -15,7 +15,7 @@ class VRSMainScreen extends StatelessWidget {
         final screenWidth = MediaQuery.of(context).size.width;
         final isSmallScreen = screenWidth < 1200;
         final padding = isSmallScreen ? 16.0 : 24.0;
-        
+
         return Padding(
           padding: EdgeInsets.all(padding),
           child: Row(
@@ -48,23 +48,87 @@ class VRSMainScreen extends StatelessWidget {
                                   builder: (context, constraints) {
                                     // Calculate square size based on available space
                                     final availableWidth = constraints.maxWidth;
-                                    final availableHeight = constraints.maxHeight;
-                                    final squareSize = availableWidth < availableHeight 
-                                        ? availableWidth 
+                                    final availableHeight =
+                                        constraints.maxHeight;
+                                    final squareSize =
+                                        availableWidth < availableHeight
+                                        ? availableWidth
                                         : availableHeight;
-                                    
+
                                     return Center(
                                       child: SizedBox(
                                         width: squareSize,
                                         height: squareSize,
-                                        child: VideoFrameWidget(
-                                          width: squareSize,
-                                          height: squareSize,
-                                          fit: BoxFit.contain,
-                                          showControls: true,
-                                          showStats: true,
-                                          placeholder: 'Đang chờ video từ server...',
-                                          backgroundColor: Colors.black,
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: Colors.black,
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                          child: Consumer<AutoVRSWebSocketService>(
+                                            builder: (context, webSocketService, child) {
+                                              if (webSocketService
+                                                      .displayImage !=
+                                                  null) {
+                                                // Backend đã vẽ bounding boxes vào ảnh rồi, chỉ cần hiển thị
+                                                return ClipRRect(
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  child: Image.memory(
+                                                    webSocketService
+                                                        .displayImage!,
+                                                    fit: BoxFit.cover,
+                                                    width: squareSize,
+                                                    height: squareSize,
+                                                  ),
+                                                );
+                                              } else if (webSocketService
+                                                  .isConnected) {
+                                                return const Center(
+                                                  child: Column(
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment
+                                                            .center,
+                                                    children: [
+                                                      CircularProgressIndicator(
+                                                        color: Colors.white,
+                                                      ),
+                                                      SizedBox(height: 8),
+                                                      Text(
+                                                        'Đang khởi tạo camera...',
+                                                        style: TextStyle(
+                                                          color: Colors.white,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                              } else {
+                                                return const Center(
+                                                  child: Column(
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment
+                                                            .center,
+                                                    children: [
+                                                      Icon(
+                                                        Icons.wifi_off,
+                                                        color: Colors.red,
+                                                        size: 48,
+                                                      ),
+                                                      SizedBox(height: 8),
+                                                      Text(
+                                                        'AutoVRS Disconnected',
+                                                        style: TextStyle(
+                                                          color: Colors.white,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                          ),
                                         ),
                                       ),
                                     );
@@ -103,12 +167,15 @@ class VRSMainScreen extends StatelessWidget {
                                     Expanded(
                                       child: LayoutBuilder(
                                         builder: (context, constraints) {
-                                          final availableWidth = constraints.maxWidth;
-                                          final availableHeight = constraints.maxHeight;
-                                          final squareSize = availableWidth < availableHeight 
-                                              ? availableWidth 
+                                          final availableWidth =
+                                              constraints.maxWidth;
+                                          final availableHeight =
+                                              constraints.maxHeight;
+                                          final squareSize =
+                                              availableWidth < availableHeight
+                                              ? availableWidth
                                               : availableHeight;
-                                          
+
                                           return Center(
                                             child: SizedBox(
                                               width: squareSize,
@@ -116,7 +183,8 @@ class VRSMainScreen extends StatelessWidget {
                                               child: Container(
                                                 decoration: BoxDecoration(
                                                   color: Colors.grey.shade700,
-                                                  borderRadius: BorderRadius.circular(6),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
                                                 ),
                                                 child: Stack(
                                                   children: [
@@ -164,12 +232,15 @@ class VRSMainScreen extends StatelessWidget {
                                     Expanded(
                                       child: LayoutBuilder(
                                         builder: (context, constraints) {
-                                          final availableWidth = constraints.maxWidth;
-                                          final availableHeight = constraints.maxHeight;
-                                          final squareSize = availableWidth < availableHeight 
-                                              ? availableWidth 
+                                          final availableWidth =
+                                              constraints.maxWidth;
+                                          final availableHeight =
+                                              constraints.maxHeight;
+                                          final squareSize =
+                                              availableWidth < availableHeight
+                                              ? availableWidth
                                               : availableHeight;
-                                          
+
                                           return Center(
                                             child: SizedBox(
                                               width: squareSize,
@@ -177,7 +248,8 @@ class VRSMainScreen extends StatelessWidget {
                                               child: Container(
                                                 decoration: BoxDecoration(
                                                   color: Colors.grey.shade200,
-                                                  borderRadius: BorderRadius.circular(6),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
                                                 ),
                                                 child: Stack(
                                                   children: [
@@ -279,7 +351,9 @@ class VRSMainScreen extends StatelessWidget {
                                 icon: const Icon(FeatherIcons.barChart),
                                 label: const Text('Xem thống kê'),
                                 style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
                                 ),
                               ),
                             );
