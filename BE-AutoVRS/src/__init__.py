@@ -1,1 +1,0 @@
-"""AutoVRS Backend Source Package"""
