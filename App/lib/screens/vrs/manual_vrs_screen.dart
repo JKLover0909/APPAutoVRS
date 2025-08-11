@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_feather_icons/flutter_feather_icons.dart';
 import 'package:go_router/go_router.dart';
@@ -253,8 +254,23 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                           child: Stack(
                                             children: [
                                               // Live video feed or captured image from AutoVRS WebSocket
-                                              Consumer<AutoVRSWebSocketService>(
-                                                builder: (context, webSocketService, child) {
+                                              ValueListenableBuilder<
+                                                Uint8List?
+                                              >(
+                                                valueListenable:
+                                                    Provider.of<
+                                                          AutoVRSWebSocketService
+                                                        >(
+                                                          context,
+                                                          listen: false,
+                                                        )
+                                                        .currentFrameNotifier,
+                                                builder: (context, frameData, child) {
+                                                  final webSocketService =
+                                                      Provider.of<
+                                                        AutoVRSWebSocketService
+                                                      >(context, listen: false);
+
                                                   if (webSocketService
                                                           .displayImage !=
                                                       null) {
@@ -270,6 +286,24 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                                         fit: BoxFit.cover,
                                                         width: squareSize,
                                                         height: squareSize,
+                                                        gaplessPlayback:
+                                                            true, // Optimize for smooth video playback
+                                                      ),
+                                                    );
+                                                  } else if (frameData !=
+                                                      null) {
+                                                    return ClipRRect(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            8,
+                                                          ),
+                                                      child: Image.memory(
+                                                        frameData,
+                                                        fit: BoxFit.cover,
+                                                        width: squareSize,
+                                                        height: squareSize,
+                                                        gaplessPlayback:
+                                                            true, // Optimize for smooth video playback
                                                       ),
                                                     );
                                                   } else if (webSocketService
