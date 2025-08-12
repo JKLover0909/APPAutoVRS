@@ -1,9 +1,11 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 
 class LocalDatabaseService {
-  static final LocalDatabaseService _instance = LocalDatabaseService._internal();
+  static final LocalDatabaseService _instance =
+      LocalDatabaseService._internal();
   factory LocalDatabaseService() => _instance;
   LocalDatabaseService._internal();
 
@@ -38,18 +40,21 @@ class LocalDatabaseService {
 
   Future<Database> _initDatabase() async {
     String path;
-    
+
     try {
       if (Platform.isWindows) {
         // Sử dụng thư mục Documents của user
-        final userProfile = Platform.environment['USERPROFILE'] ?? 'C:\\Users\\Default';
-        final documentsDir = Directory(join(userProfile, 'Documents', 'AutoVRS'));
-        
+        final userProfile =
+            Platform.environment['USERPROFILE'] ?? 'C:\\Users\\Default';
+        final documentsDir = Directory(
+          join(userProfile, 'Documents', 'AutoVRS'),
+        );
+
         // Tạo thư mục nếu không tồn tại
         if (!await documentsDir.exists()) {
           await documentsDir.create(recursive: true);
         }
-        
+
         path = join(documentsDir.path, 'autovrs.db');
       } else {
         final dbPath = await getDatabasesPath();
@@ -59,20 +64,20 @@ class LocalDatabaseService {
         }
         path = join(dbPath, 'autovrs.db');
       }
-      
-      print('Database path: $path');
-      
+
+      debugPrint('Database path: $path');
+
       return await openDatabase(
         path,
         version: 1,
         onCreate: _createTables,
         onOpen: (db) {
-          print('Database opened successfully');
+          debugPrint('Database opened successfully');
         },
       );
     } catch (e) {
-      print('Error creating database: $e');
-      throw e;
+      debugPrint('Error creating database: $e');
+      rethrow;
     }
   }
 
@@ -128,13 +133,14 @@ class LocalDatabaseService {
         config_value TEXT
       )
     ''');
-    
-    print('Database tables created successfully');
+
+    debugPrint('Database tables created successfully');
   }
 
   Future<String> get databasePath async {
     if (Platform.isWindows) {
-      final userProfile = Platform.environment['USERPROFILE'] ?? 'C:\\Users\\Default';
+      final userProfile =
+          Platform.environment['USERPROFILE'] ?? 'C:\\Users\\Default';
       final documentsDir = Directory(join(userProfile, 'Documents', 'AutoVRS'));
       return join(documentsDir.path, 'autovrs.db');
     } else {
@@ -146,7 +152,11 @@ class LocalDatabaseService {
   // ========== MODEL OPERATIONS ==========
   Future<int> insertModel(Map<String, dynamic> model) async {
     final db = await database;
-    return await db.insert('tbModel', model, conflictAlgorithm: ConflictAlgorithm.replace);
+    return await db.insert(
+      'tbModel',
+      model,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<List<Map<String, dynamic>>> getAllModels() async {
@@ -170,7 +180,11 @@ class LocalDatabaseService {
   // ========== LOT OPERATIONS ==========
   Future<int> insertLot(Map<String, dynamic> lot) async {
     final db = await database;
-    return await db.insert('tbLot', lot, conflictAlgorithm: ConflictAlgorithm.replace);
+    return await db.insert(
+      'tbLot',
+      lot,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<List<Map<String, dynamic>>> getAllLots() async {
@@ -180,14 +194,22 @@ class LocalDatabaseService {
 
   Future<Map<String, dynamic>?> getLotById(int idLot) async {
     final db = await database;
-    final results = await db.query('tbLot', where: 'id_lot = ?', whereArgs: [idLot]);
+    final results = await db.query(
+      'tbLot',
+      where: 'id_lot = ?',
+      whereArgs: [idLot],
+    );
     return results.isNotEmpty ? results.first : null;
   }
 
   // ========== BOARD OPERATIONS ==========
   Future<int> insertBoard(Map<String, dynamic> board) async {
     final db = await database;
-    return await db.insert('tbBoard', board, conflictAlgorithm: ConflictAlgorithm.replace);
+    return await db.insert(
+      'tbBoard',
+      board,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<List<Map<String, dynamic>>> getAllBoards() async {
@@ -197,19 +219,32 @@ class LocalDatabaseService {
 
   Future<List<Map<String, dynamic>>> getBoardsByLot(int idLot) async {
     final db = await database;
-    return await db.query('tbBoard', where: 'tbLotid_lot = ?', whereArgs: [idLot], orderBy: 'id_board DESC');
+    return await db.query(
+      'tbBoard',
+      where: 'tbLotid_lot = ?',
+      whereArgs: [idLot],
+      orderBy: 'id_board DESC',
+    );
   }
 
   Future<Map<String, dynamic>?> getBoardById(int idBoard) async {
     final db = await database;
-    final results = await db.query('tbBoard', where: 'id_board = ?', whereArgs: [idBoard]);
+    final results = await db.query(
+      'tbBoard',
+      where: 'id_board = ?',
+      whereArgs: [idBoard],
+    );
     return results.isNotEmpty ? results.first : null;
   }
 
   // ========== DEFECT OPERATIONS ==========
   Future<int> insertDefect(Map<String, dynamic> defect) async {
     final db = await database;
-    return await db.insert('tbDefect', defect, conflictAlgorithm: ConflictAlgorithm.replace);
+    return await db.insert(
+      'tbDefect',
+      defect,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<List<Map<String, dynamic>>> getAllDefects() async {
@@ -219,18 +254,32 @@ class LocalDatabaseService {
 
   Future<List<Map<String, dynamic>>> getDefectsByBoard(int idBoard) async {
     final db = await database;
-    return await db.query('tbDefect', where: 'tbBoardid_board = ?', whereArgs: [idBoard], orderBy: 'time DESC');
+    return await db.query(
+      'tbDefect',
+      where: 'tbBoardid_board = ?',
+      whereArgs: [idBoard],
+      orderBy: 'time DESC',
+    );
   }
 
   Future<List<Map<String, dynamic>>> getDefectsByType(String defectType) async {
     final db = await database;
-    return await db.query('tbDefect', where: 'type = ?', whereArgs: [defectType], orderBy: 'time DESC');
+    return await db.query(
+      'tbDefect',
+      where: 'type = ?',
+      whereArgs: [defectType],
+      orderBy: 'time DESC',
+    );
   }
 
   // ========== CONFIG OPERATIONS ==========
   Future<int> insertConfig(Map<String, dynamic> config) async {
     final db = await database;
-    return await db.insert('tbConfig', config, conflictAlgorithm: ConflictAlgorithm.replace);
+    return await db.insert(
+      'tbConfig',
+      config,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<List<Map<String, dynamic>>> getAllConfigs() async {
@@ -240,13 +289,22 @@ class LocalDatabaseService {
 
   Future<String?> getConfigValue(String key) async {
     final db = await database;
-    final results = await db.query('tbConfig', where: 'config_key = ?', whereArgs: [key]);
+    final results = await db.query(
+      'tbConfig',
+      where: 'config_key = ?',
+      whereArgs: [key],
+    );
     return results.isNotEmpty ? results.first['config_value'] as String? : null;
   }
 
   Future<int> updateConfig(String key, String value) async {
     final db = await database;
-    return await db.update('tbConfig', {'config_value': value}, where: 'config_key = ?', whereArgs: [key]);
+    return await db.update(
+      'tbConfig',
+      {'config_value': value},
+      where: 'config_key = ?',
+      whereArgs: [key],
+    );
   }
 
   // ========== STATISTICS OPERATIONS ==========
@@ -257,7 +315,7 @@ class LocalDatabaseService {
       FROM tbDefect 
       GROUP BY type
     ''');
-    
+
     final Map<String, int> stats = {};
     for (var row in results) {
       stats[row['type'] as String] = row['count'] as int;
@@ -267,28 +325,29 @@ class LocalDatabaseService {
 
   Future<Map<String, dynamic>> getLotStatistics(int idLot) async {
     final db = await database;
-    
+
     // Get total boards for this lot
-    final totalResult = await db.rawQuery('''
+    final totalResult = await db.rawQuery(
+      '''
       SELECT COUNT(*) as total FROM tbBoard WHERE tbLotid_lot = ?
-    ''', [idLot]);
+    ''',
+      [idLot],
+    );
     final total = totalResult.first['total'] as int;
-    
+
     // Get boards with defects (defect_quantity > 0)
-    final ngResult = await db.rawQuery('''
+    final ngResult = await db.rawQuery(
+      '''
       SELECT COUNT(*) as ng FROM tbBoard WHERE tbLotid_lot = ? AND defect_quantity > 0
-    ''', [idLot]);
+    ''',
+      [idLot],
+    );
     final ng = ngResult.first['ng'] as int;
-    
+
     final ok = total - ng;
     final ngRate = total > 0 ? (ng / total) * 100 : 0.0;
-    
-    return {
-      'total': total,
-      'ok': ok,
-      'ng': ng,
-      'ngRate': ngRate,
-    };
+
+    return {'total': total, 'ok': ok, 'ng': ng, 'ngRate': ngRate};
   }
 
   Future<List<Map<String, dynamic>>> getAllLotStatistics() async {
@@ -323,13 +382,33 @@ class LocalDatabaseService {
 
   Future<Map<String, dynamic>> getDatabaseInfo() async {
     final db = await database;
-    
-    final modelCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM tbModel')) ?? 0;
-    final lotCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM tbLot')) ?? 0;
-    final boardCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM tbBoard')) ?? 0;
-    final defectCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM tbDefect')) ?? 0;
-    final configCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM tbConfig')) ?? 0;
-    
+
+    final modelCount =
+        Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(*) FROM tbModel'),
+        ) ??
+        0;
+    final lotCount =
+        Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(*) FROM tbLot'),
+        ) ??
+        0;
+    final boardCount =
+        Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(*) FROM tbBoard'),
+        ) ??
+        0;
+    final defectCount =
+        Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(*) FROM tbDefect'),
+        ) ??
+        0;
+    final configCount =
+        Sqflite.firstIntValue(
+          await db.rawQuery('SELECT COUNT(*) FROM tbConfig'),
+        ) ??
+        0;
+
     return {
       'models': modelCount,
       'lots': lotCount,

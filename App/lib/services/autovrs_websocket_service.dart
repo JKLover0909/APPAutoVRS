@@ -4,7 +4,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:flutter/foundation.dart';
 
 class AutoVRSWebSocketService extends ChangeNotifier {
-  static const String defaultServerUrl = 'wss://a16a9f0647f7.ngrok-free.app/';
+  static const String defaultServerUrl = 'wss://5d0fc6ea5f81.ngrok-free.app/';
 
   WebSocketChannel? _channel;
   StreamSubscription? _subscription;
@@ -295,16 +295,30 @@ class AutoVRSWebSocketService extends ChangeNotifier {
   }
 
   void debugSetCapturedState() {
-    print('🔧 DEBUG: Force setting captured state');
+    debugPrint('🔧 DEBUG: Force setting captured state');
     _capturedImage = _currentFrame; // Sử dụng frame hiện tại làm captured image
     _isViewingCapturedImage = true;
     _capturedDetections = [
       {'x': 100, 'y': 100, 'width': 50, 'height': 50, 'confidence': 0.95},
     ]; // Test detection
     notifyListeners();
-    print(
+    debugPrint(
       '🔧 DEBUG: State set - isViewingCapturedImage: $_isViewingCapturedImage',
     );
+  }
+
+  /// Set captured image để hiển thị thay vì live stream
+  void setCapturedImage(Uint8List imageData) {
+    _capturedImage = imageData;
+    notifyListeners();
+    debugPrint('📸 Captured image set (${imageData.length} bytes)');
+  }
+
+  /// Set trạng thái xem captured image hay live stream
+  void setViewingCapturedImage(bool isViewing) {
+    _isViewingCapturedImage = isViewing;
+    notifyListeners();
+    debugPrint('🔄 Viewing captured image: $isViewing');
   }
 
   /// Gửi request chụp ảnh

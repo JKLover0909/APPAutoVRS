@@ -13,6 +13,7 @@ import 'providers/vrs_provider.dart';
 import 'providers/statistics_provider.dart';
 import 'services/flutter_camera_service.dart';
 import 'services/autovrs_websocket_service.dart';
+import 'services/ai_detection_service.dart';
 import 'services/local_database_service.dart';
 import 'services/database_seeder.dart';
 
@@ -35,7 +36,9 @@ void main() async {
       await Hive.initFlutter();
     }
   } catch (e) {
-    print('Warning: Hive initialization failed, continuing without Hive: $e');
+    debugPrint(
+      'Warning: Hive initialization failed, continuing without Hive: $e',
+    );
     // Continue without Hive - app can still work
   }
 
@@ -43,18 +46,18 @@ void main() async {
   try {
     final dbService = LocalDatabaseService();
     final dbPath = await dbService.databasePath;
-    print('SQLite database path: $dbPath');
+    debugPrint('SQLite database path: $dbPath');
 
     // Initialize database connection
     await dbService.database;
-    print('Database initialized successfully');
+    debugPrint('Database initialized successfully');
 
     // Seed database with sample data
     final seeder = DatabaseSeeder();
     await seeder.seedDatabase();
   } catch (e) {
-    print('Warning: Database initialization failed: $e');
-    print('App will continue without local database');
+    debugPrint('Warning: Database initialization failed: $e');
+    debugPrint('App will continue without local database');
   }
 
   runApp(const AutoVRSApp());
@@ -73,6 +76,7 @@ class AutoVRSApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => StatisticsProvider()),
         ChangeNotifierProvider(create: (_) => FlutterCameraService()),
         ChangeNotifierProvider(create: (_) => AutoVRSWebSocketService()),
+        ChangeNotifierProvider(create: (_) => AIDetectionService()),
       ],
       child: Consumer<NavigationProvider>(
         builder: (context, navigationProvider, child) {

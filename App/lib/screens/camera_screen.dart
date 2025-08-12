@@ -22,15 +22,17 @@ class _CameraScreenState extends State<CameraScreen> {
 
   Future<void> _initializeCamera() async {
     _cameraService = Provider.of<FlutterCameraService>(context, listen: false);
-    
+
     final success = await _cameraService.initialize();
-    
+
     setState(() {
       _isInitializing = false;
     });
-    
+
     if (!success) {
-      _showErrorDialog('Camera initialization failed: ${_cameraService.lastError}');
+      _showErrorDialog(
+        'Camera initialization failed: ${_cameraService.lastError}',
+      );
     }
   }
 
@@ -70,7 +72,9 @@ class _CameraScreenState extends State<CameraScreen> {
                     service.reconnectToAI();
                   }
                 },
-                tooltip: service.isConnectedToAI ? 'AI Connected' : 'AI Disconnected - Tap to reconnect',
+                tooltip: service.isConnectedToAI
+                    ? 'AI Connected'
+                    : 'AI Disconnected - Tap to reconnect',
               );
             },
           ),
@@ -94,7 +98,11 @@ class _CameraScreenState extends State<CameraScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.camera_alt_outlined, size: 64, color: Colors.grey),
+                        const Icon(
+                          Icons.camera_alt_outlined,
+                          size: 64,
+                          color: Colors.grey,
+                        ),
                         const SizedBox(height: 16),
                         Text(
                           'Camera not available',
@@ -103,7 +111,9 @@ class _CameraScreenState extends State<CameraScreen> {
                         const SizedBox(height: 8),
                         Text(
                           service.lastError ?? 'Unknown error',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.red),
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodyMedium?.copyWith(color: Colors.red),
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 16),
@@ -119,17 +129,11 @@ class _CameraScreenState extends State<CameraScreen> {
                 return Column(
                   children: [
                     // Camera Preview
-                    Expanded(
-                      flex: 3,
-                      child: _buildCameraPreview(service),
-                    ),
-                    
+                    Expanded(flex: 3, child: _buildCameraPreview(service)),
+
                     // Analysis Results
-                    Expanded(
-                      flex: 1,
-                      child: _buildAnalysisResults(service),
-                    ),
-                    
+                    Expanded(flex: 1, child: _buildAnalysisResults(service)),
+
                     // Controls
                     _buildControls(service),
                   ],
@@ -148,15 +152,12 @@ class _CameraScreenState extends State<CameraScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Image.memory(
-              service.lastCapturedImage!,
-              fit: BoxFit.contain,
-            ),
-            
+            Image.memory(service.lastCapturedImage!, fit: BoxFit.contain),
+
             // Detection overlays
-            if (service.lastAnalysisResult != null) 
+            if (service.lastAnalysisResult != null)
               _buildDetectionOverlay(service.lastAnalysisResult!),
-            
+
             // Back to live button
             Positioned(
               top: 16,
@@ -197,7 +198,7 @@ class _CameraScreenState extends State<CameraScreen> {
 
   Widget _buildDetectionOverlay(Map<String, dynamic> analysisResult) {
     final detections = analysisResult['detections'] as List<dynamic>? ?? [];
-    
+
     return CustomPaint(
       painter: DetectionOverlayPainter(detections),
       size: Size.infinite,
@@ -221,9 +222,9 @@ class _CameraScreenState extends State<CameraScreen> {
               const SizedBox(width: 8),
               Text(
                 'Analysis Results',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
               const Spacer(),
               if (service.isAnalyzing)
@@ -235,7 +236,7 @@ class _CameraScreenState extends State<CameraScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          
+
           if (service.lastAnalysisResult != null) ...[
             _buildAnalysisCard(service.lastAnalysisResult!),
           ] else if (service.isAnalyzing) ...[
@@ -256,7 +257,7 @@ class _CameraScreenState extends State<CameraScreen> {
   Widget _buildAnalysisCard(Map<String, dynamic> result) {
     final numDefects = result['num_defects'] ?? 0;
     final detections = result['detections'] as List<dynamic>? ?? [];
-    
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -279,7 +280,7 @@ class _CameraScreenState extends State<CameraScreen> {
                 ),
               ],
             ),
-            
+
             if (detections.isNotEmpty) ...[
               const SizedBox(height: 8),
               ...detections.take(3).map((detection) {
@@ -293,11 +294,14 @@ class _CameraScreenState extends State<CameraScreen> {
                   ),
                 );
               }),
-              
+
               if (detections.length > 3)
                 Text(
                   '... and ${detections.length - 3} more',
-                  style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                  ),
                 ),
             ],
           ],
@@ -313,7 +317,7 @@ class _CameraScreenState extends State<CameraScreen> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 4,
             offset: const Offset(0, -2),
           ),
@@ -324,15 +328,19 @@ class _CameraScreenState extends State<CameraScreen> {
         children: [
           // Camera switch button
           IconButton(
-            onPressed: service.cameras.length > 1 ? () => _showCameraSwitchDialog(service) : null,
+            onPressed: service.cameras.length > 1
+                ? () => _showCameraSwitchDialog(service)
+                : null,
             icon: const Icon(Icons.switch_camera),
             iconSize: 32,
             tooltip: 'Switch Camera',
           ),
-          
+
           // Capture button
           GestureDetector(
-            onTap: service.isAnalyzing ? null : () => service.captureImage(analyzeWithAI: true),
+            onTap: service.isAnalyzing
+                ? null
+                : () => service.captureImage(analyzeWithAI: true),
             child: Container(
               width: 70,
               height: 70,
@@ -348,16 +356,22 @@ class _CameraScreenState extends State<CameraScreen> {
               ),
             ),
           ),
-          
+
           // AI toggle button
           IconButton(
-            onPressed: service.isConnectedToAI ? null : () => service.reconnectToAI(),
+            onPressed: service.isConnectedToAI
+                ? null
+                : () => service.reconnectToAI(),
             icon: Icon(
-              service.isConnectedToAI ? Icons.smart_toy : Icons.smart_toy_outlined,
+              service.isConnectedToAI
+                  ? Icons.smart_toy
+                  : Icons.smart_toy_outlined,
               color: service.isConnectedToAI ? Colors.green : Colors.grey,
             ),
             iconSize: 32,
-            tooltip: service.isConnectedToAI ? 'AI Connected' : 'Reconnect to AI',
+            tooltip: service.isConnectedToAI
+                ? 'AI Connected'
+                : 'Reconnect to AI',
           ),
         ],
       ),
@@ -398,7 +412,7 @@ class DetectionOverlayPainter extends CustomPainter {
       final bbox = detection['bbox'] as List<dynamic>?;
       final className = detection['class_name'] as String? ?? 'Unknown';
       final confidence = detection['confidence'] as double? ?? 0.0;
-      
+
       if (bbox != null && bbox.length >= 4) {
         final paint = Paint()
           ..color = Colors.red
@@ -428,7 +442,7 @@ class DetectionOverlayPainter extends CustomPainter {
         );
 
         textPainter.layout();
-        
+
         final labelRect = Rect.fromLTWH(
           rect.left,
           rect.top - textPainter.height - 4,
@@ -437,7 +451,10 @@ class DetectionOverlayPainter extends CustomPainter {
         );
 
         canvas.drawRect(labelRect, Paint()..color = Colors.red);
-        textPainter.paint(canvas, Offset(rect.left + 4, rect.top - textPainter.height - 2));
+        textPainter.paint(
+          canvas,
+          Offset(rect.left + 4, rect.top - textPainter.height - 2),
+        );
       }
     }
   }

@@ -57,13 +57,15 @@ class _LightAdjustScreenState extends State<LightAdjustScreen> {
                                   Icon(
                                     FeatherIcons.camera,
                                     size: 64,
-                                    color: Colors.white.withOpacity(0.7),
+                                    color: Colors.white.withValues(alpha: 0.7),
                                   ),
                                   const SizedBox(height: 16),
                                   Text(
                                     'Live Camera Preview',
                                     style: TextStyle(
-                                      color: Colors.white.withOpacity(0.8),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.8,
+                                      ),
                                       fontSize: 18,
                                     ),
                                   ),
@@ -71,7 +73,9 @@ class _LightAdjustScreenState extends State<LightAdjustScreen> {
                                   Text(
                                     'Brightness: ${_calculateBrightness()}%',
                                     style: TextStyle(
-                                      color: Colors.white.withOpacity(0.6),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.6,
+                                      ),
                                       fontSize: 14,
                                     ),
                                   ),
@@ -87,7 +91,9 @@ class _LightAdjustScreenState extends State<LightAdjustScreen> {
                                   center: const Alignment(0, -0.3),
                                   radius: 1.2,
                                   colors: [
-                                    Colors.white.withOpacity(_domeLight / 200),
+                                    Colors.white.withValues(
+                                      alpha: _domeLight / 200,
+                                    ),
                                     Colors.transparent,
                                   ],
                                 ),
@@ -295,7 +301,7 @@ class _LightAdjustScreenState extends State<LightAdjustScreen> {
           data: SliderTheme.of(context).copyWith(
             activeTrackColor: color,
             thumbColor: color,
-            overlayColor: color.withOpacity(0.3),
+            overlayColor: color.withValues(alpha: 0.3),
           ),
           child: Slider(
             value: value,

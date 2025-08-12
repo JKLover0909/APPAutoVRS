@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/io.dart';
 
@@ -13,11 +14,11 @@ class WebSocketService {
   StreamController<Map<String, dynamic>>? _aiProgressController;
   Timer? _reconnectTimer;
   Timer? _pingTimer;
-  
+
   bool _isConnected = false;
   bool _shouldReconnect = true;
   String? _serverUrl;
-  
+
   // Getters
   bool get isConnected => _isConnected;
   Stream<Map<String, dynamic>>? get messages => _messageController?.stream;
@@ -27,33 +28,33 @@ class WebSocketService {
     try {
       _serverUrl = serverUrl;
       _shouldReconnect = true;
-      
-      print('[WebSocket] Connecting to: $serverUrl');
-      
+
+      debugPrint('[WebSocket] Connecting to: $serverUrl');
+
       // Create WebSocket connection
       _channel = IOWebSocketChannel.connect(Uri.parse(serverUrl));
-      
+
       // Initialize stream controllers
       _messageController = StreamController<Map<String, dynamic>>.broadcast();
-      _aiProgressController = StreamController<Map<String, dynamic>>.broadcast();
-      
+      _aiProgressController =
+          StreamController<Map<String, dynamic>>.broadcast();
+
       // Listen to messages
       _channel!.stream.listen(
         _onMessage,
         onError: _onError,
         onDone: _onDisconnected,
       );
-      
+
       _isConnected = true;
       _startPingTimer();
-      
-      print('[WebSocket] Connected successfully');
-      
+
+      debugPrint('[WebSocket] Connected successfully');
+
       // Subscribe to AI updates
       await subscribeToAIUpdates();
-      
     } catch (e) {
-      print('[WebSocket] Connection failed: $e');
+      debugPrint('[WebSocket] Connection failed: $e');
       _isConnected = false;
       _scheduleReconnect();
     }
@@ -62,36 +63,35 @@ class WebSocketService {
   void _onMessage(dynamic message) {
     try {
       final data = jsonDecode(message as String);
-      print('[WebSocket] Received: $data');
-      
+      debugPrint('[WebSocket] Received: $data');
+
       // Route message to appropriate stream
       if (data['type'] == 'ai_progress') {
         _aiProgressController?.add(data);
       } else {
         _messageController?.add(data);
       }
-      
+
       // Handle pong response
       if (data['type'] == 'pong') {
-        print('[WebSocket] Pong received');
+        debugPrint('[WebSocket] Pong received');
       }
-      
     } catch (e) {
-      print('[WebSocket] Error parsing message: $e');
+      debugPrint('[WebSocket] Error parsing message: $e');
     }
   }
 
   void _onError(error) {
-    print('[WebSocket] Error: $error');
+    debugPrint('[WebSocket] Error: $error');
     _isConnected = false;
     _scheduleReconnect();
   }
 
   void _onDisconnected() {
-    print('[WebSocket] Disconnected');
+    debugPrint('[WebSocket] Disconnected');
     _isConnected = false;
     _stopPingTimer();
-    
+
     if (_shouldReconnect) {
       _scheduleReconnect();
     }
@@ -99,11 +99,11 @@ class WebSocketService {
 
   void _scheduleReconnect() {
     if (!_shouldReconnect || _serverUrl == null) return;
-    
+
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(const Duration(seconds: 5), () {
       if (!_isConnected && _shouldReconnect) {
-        print('[WebSocket] Attempting to reconnect...');
+        debugPrint('[WebSocket] Attempting to reconnect...');
         connect(_serverUrl!);
       }
     });
@@ -125,48 +125,44 @@ class WebSocketService {
 
   Future<void> sendMessage(Map<String, dynamic> message) async {
     if (!_isConnected || _channel == null) {
-      print('[WebSocket] Cannot send message - not connected');
+      debugPrint('[WebSocket] Cannot send message - not connected');
       return;
     }
 
     try {
       final jsonMessage = jsonEncode(message);
       _channel!.sink.add(jsonMessage);
-      print('[WebSocket] Sent: $jsonMessage');
+      debugPrint('[WebSocket] Sent: $jsonMessage');
     } catch (e) {
-      print('[WebSocket] Error sending message: $e');
+      debugPrint('[WebSocket] Error sending message: $e');
     }
   }
 
   Future<void> subscribeToAIUpdates() async {
-    await sendMessage({
-      'type': 'subscribe_ai_updates'
-    });
+    await sendMessage({'type': 'subscribe_ai_updates'});
   }
 
   Future<void> requestSystemStatus() async {
-    await sendMessage({
-      'type': 'get_system_status'
-    });
+    await sendMessage({'type': 'get_system_status'});
   }
 
   Future<void> testBroadcast() async {
     await sendMessage({
       'type': 'test_broadcast',
-      'message': 'Test from Flutter client'
+      'message': 'Test from Flutter client',
     });
   }
 
   void disconnect() {
-    print('[WebSocket] Disconnecting...');
+    debugPrint('[WebSocket] Disconnecting...');
     _shouldReconnect = false;
     _reconnectTimer?.cancel();
     _stopPingTimer();
-    
+
     _channel?.sink.close();
     _messageController?.close();
     _aiProgressController?.close();
-    
+
     _isConnected = false;
     _channel = null;
     _messageController = null;
@@ -194,7 +190,9 @@ class AIProgress {
     return AIProgress(
       percentage: json['percentage'] ?? 0,
       message: json['message'] ?? '',
-      timestamp: DateTime.parse(json['timestamp'] ?? DateTime.now().toIso8601String()),
+      timestamp: DateTime.parse(
+        json['timestamp'] ?? DateTime.now().toIso8601String(),
+      ),
     );
   }
 }

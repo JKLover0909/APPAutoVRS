@@ -37,7 +37,7 @@ class _VideoFrameWidgetState extends State<VideoFrameWidget> {
   void initState() {
     super.initState();
     _videoService = VideoFrameService();
-    
+
     // Auto-connect nếu chưa connected
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_videoService.isConnected) {
@@ -59,9 +59,9 @@ class _VideoFrameWidgetState extends State<VideoFrameWidget> {
               color: widget.backgroundColor,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: videoService.isConnected 
-                    ? Colors.green.withOpacity(0.3)
-                    : Colors.red.withOpacity(0.3),
+                color: videoService.isConnected
+                    ? Colors.green.withValues(alpha: 0.3)
+                    : Colors.red.withValues(alpha: 0.3),
                 width: 2,
               ),
             ),
@@ -69,13 +69,13 @@ class _VideoFrameWidgetState extends State<VideoFrameWidget> {
               children: [
                 // Video frame chính
                 _buildVideoContent(videoService),
-                
+
                 // Controls overlay (nếu enable)
                 if (widget.showControls) _buildControlsOverlay(videoService),
-                
+
                 // Stats overlay (nếu enable)
                 if (widget.showStats) _buildStatsOverlay(videoService),
-                
+
                 // Connection status indicator
                 _buildConnectionIndicator(videoService),
               ],
@@ -104,9 +104,9 @@ class _VideoFrameWidgetState extends State<VideoFrameWidget> {
                 },
               )
             : _buildPlaceholder(
-                videoService.isConnected 
+                videoService.isConnected
                     ? 'Đang chờ video frame...'
-                    : widget.placeholder ?? 'Không có kết nối video'
+                    : widget.placeholder ?? 'Không có kết nối video',
               ),
       ),
     );
@@ -122,18 +122,11 @@ class _VideoFrameWidgetState extends State<VideoFrameWidget> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.videocam_off,
-              size: 48,
-              color: Colors.grey[600],
-            ),
+            Icon(Icons.videocam_off, size: 48, color: Colors.grey[600]),
             const SizedBox(height: 8),
             Text(
               message,
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 14,
-              ),
+              style: TextStyle(color: Colors.grey[600], fontSize: 14),
               textAlign: TextAlign.center,
             ),
           ],
@@ -151,7 +144,7 @@ class _VideoFrameWidgetState extends State<VideoFrameWidget> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.7),
+          color: Colors.black.withValues(alpha: 0.7),
           borderRadius: BorderRadius.circular(6),
         ),
         child: Row(
@@ -171,27 +164,20 @@ class _VideoFrameWidgetState extends State<VideoFrameWidget> {
                 }
               },
             ),
-            
+
             const SizedBox(width: 8),
-            
+
             // Frame info
             Expanded(
               child: Text(
                 'Frame: ${videoService.frameId} | ${videoService.videoWidth}x${videoService.videoHeight}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 12),
               ),
             ),
-            
+
             // Settings button
             IconButton(
-              icon: const Icon(
-                Icons.settings,
-                color: Colors.white,
-                size: 20,
-              ),
+              icon: const Icon(Icons.settings, color: Colors.white, size: 20),
               onPressed: () => _showSettingsDialog(context, videoService),
             ),
           ],
@@ -208,7 +194,7 @@ class _VideoFrameWidgetState extends State<VideoFrameWidget> {
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.7),
+          color: Colors.black.withValues(alpha: 0.7),
           borderRadius: BorderRadius.circular(6),
         ),
         child: Column(
@@ -270,7 +256,10 @@ class _VideoFrameWidgetState extends State<VideoFrameWidget> {
   }
 
   /// Hiển thị dialog settings
-  void _showSettingsDialog(BuildContext context, VideoFrameService videoService) {
+  void _showSettingsDialog(
+    BuildContext context,
+    VideoFrameService videoService,
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -281,9 +270,13 @@ class _VideoFrameWidgetState extends State<VideoFrameWidget> {
           children: [
             Text('Server: ws://localhost:8081'),
             const SizedBox(height: 8),
-            Text('Status: ${videoService.isConnected ? "Connected" : "Disconnected"}'),
+            Text(
+              'Status: ${videoService.isConnected ? "Connected" : "Disconnected"}',
+            ),
             const SizedBox(height: 8),
-            Text('Resolution: ${videoService.videoWidth}x${videoService.videoHeight}'),
+            Text(
+              'Resolution: ${videoService.videoWidth}x${videoService.videoHeight}',
+            ),
             const SizedBox(height: 8),
             Text('FPS: ${videoService.videoFps}'),
             const SizedBox(height: 8),

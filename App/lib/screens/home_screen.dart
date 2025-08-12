@@ -20,8 +20,11 @@ class _HomeScreenState extends State<HomeScreen> {
     // Initialize providers when screen loads
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final vrsProvider = Provider.of<VRSProvider>(context, listen: false);
-      final statsProvider = Provider.of<StatisticsProvider>(context, listen: false);
-      
+      final statsProvider = Provider.of<StatisticsProvider>(
+        context,
+        listen: false,
+      );
+
       vrsProvider.initialize();
       statsProvider.initialize();
     });
@@ -62,7 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
               gradient: LinearGradient(
                 colors: [
                   Theme.of(context).primaryColor,
-                  Theme.of(context).primaryColor.withOpacity(0.8),
+                  Theme.of(context).primaryColor.withValues(alpha: 0.8),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -153,7 +156,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 'Model hiện tại',
                 vrsProvider.currentModelName.isNotEmpty
                     ? vrsProvider.currentModelName
-                    : (vrsProvider.currentModel.isNotEmpty ? vrsProvider.currentModel : 'Chưa chọn'),
+                    : (vrsProvider.currentModel.isNotEmpty
+                          ? vrsProvider.currentModel
+                          : 'Chưa chọn'),
                 vrsProvider.currentModel.isEmpty ? Colors.grey : Colors.green,
                 FeatherIcons.package,
               ),

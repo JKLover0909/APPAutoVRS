@@ -208,7 +208,7 @@ class _BoardAlignScreenState extends State<BoardAlignScreen> {
         width: 20,
         height: 20,
         decoration: BoxDecoration(
-          color: color.withOpacity(0.8),
+          color: color.withValues(alpha: 0.8),
           border: Border.all(color: color, width: 2),
           borderRadius: BorderRadius.circular(10),
         ),
@@ -258,7 +258,9 @@ class _BoardAlignScreenState extends State<BoardAlignScreen> {
     // Auto-advance to next step (except for step 4)
     if (widget.step < 4) {
       Future.delayed(const Duration(milliseconds: 500), () {
-        context.pushReplacement('/board-align/${widget.step + 1}');
+        if (mounted) {
+          context.pushReplacement('/board-align/${widget.step + 1}');
+        }
       });
     }
   }
