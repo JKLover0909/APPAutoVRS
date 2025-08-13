@@ -326,7 +326,7 @@ class AIDetectionService:
             logger.info(f"🔍 Inference complete - outputs count: {len(outputs)}")
             for i, output in enumerate(outputs):
                 try:
-                    logger.info(f"🔍 Output {i} shape: {output.shape}")
+                    logger.info(f"🔍 Output {i} shape: {output.shape}") # type: ignore
                 except:
                     logger.info(f"🔍 Output {i} type: {type(output)}")
             
@@ -394,12 +394,31 @@ async def ai_detection(request: DetectionRequest):
         if image is None:
             raise HTTPException(status_code=400, detail="Invalid image data")
         
+        # Tạo folder images_ai nếu chưa tồn tại
+        save_folder = os.path.join(os.path.dirname(__file__), "images_ai")
+        os.makedirs(save_folder, exist_ok=True)
+        
+        # Tạo tên file với timestamp
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        input_filename = f"ai_input_{timestamp}.jpg"
+        processed_filename = f"ai_processed_{timestamp}.jpg"
+        
+        # Lưu ảnh gốc
+        input_save_path = os.path.join(save_folder, input_filename)
+        cv2.imwrite(input_save_path, image)
+        logger.info(f"💾 Saved input image: {input_save_path}")
+        
         # Run AI detection
         detections, result_image, stats = ai_service.detect_defects(
             image, 
             request.confidence_threshold, 
             request.iou_threshold
         )
+        
+        # Lưu ảnh đã xử lý (có bounding boxes)
+        processed_save_path = os.path.join(save_folder, processed_filename)
+        cv2.imwrite(processed_save_path, result_image)
+        logger.info(f"💾 Saved processed image: {processed_save_path}")
         
         # Encode result image
         _, buffer = cv2.imencode('.jpg', result_image)
@@ -409,7 +428,7 @@ async def ai_detection(request: DetectionRequest):
         
         return DetectionResult(
             success=True,
-            message=f"Detection completed successfully. Found {len(detections)} defects.",
+            message=f"Detection completed successfully. Found {len(detections)} defects. Images saved: {input_filename}, {processed_filename}",
             detections=detections,
             processed_image_base64=result_image_base64,
             statistics=stats,

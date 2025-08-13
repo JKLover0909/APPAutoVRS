@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/io.dart';
@@ -56,7 +55,9 @@ class VideoFrameService extends ChangeNotifier {
       _shouldReconnect = true;
       _connectionAttempts++;
 
-      debugPrint('🎬 [VideoFrameService] Connecting to: $_serverUrl (Attempt: $_connectionAttempts)');
+      debugPrint(
+        '🎬 [VideoFrameService] Connecting to: $_serverUrl (Attempt: $_connectionAttempts)',
+      );
 
       // Tạo WebSocket connection
       _channel = IOWebSocketChannel.connect(Uri.parse(_serverUrl));
@@ -113,7 +114,9 @@ class VideoFrameService extends ChangeNotifier {
           _handleVideoFrame(data);
           break;
         default:
-          debugPrint('🤷 [VideoFrameService] Unknown message type: $messageType');
+          debugPrint(
+            '🤷 [VideoFrameService] Unknown message type: $messageType',
+          );
       }
     } catch (e) {
       debugPrint('❌ [VideoFrameService] Error parsing message: $e');
@@ -132,7 +135,9 @@ class VideoFrameService extends ChangeNotifier {
       debugPrint('   📏 Resolution: ${_videoWidth}x$_videoHeight');
       debugPrint('   ⚡ FPS: $_videoFps');
       debugPrint('   🎬 Total Frames: $_totalFrames');
-      debugPrint('   ⏱️ Duration: ${(_totalFrames / _videoFps).toStringAsFixed(2)}s');
+      debugPrint(
+        '   ⏱️ Duration: ${(_totalFrames / _videoFps).toStringAsFixed(2)}s',
+      );
 
       notifyListeners();
     } catch (e) {
@@ -154,7 +159,9 @@ class VideoFrameService extends ChangeNotifier {
 
       // Log statistics mỗi 100 frames
       if (_framesReceived % 100 == 0) {
-        debugPrint('📊 [VideoFrameService] Frames received: $_framesReceived, Current frame: $_frameId');
+        debugPrint(
+          '📊 [VideoFrameService] Frames received: $_framesReceived, Current frame: $_frameId',
+        );
       }
 
       notifyListeners();
@@ -180,17 +187,19 @@ class VideoFrameService extends ChangeNotifier {
     if (_shouldReconnect) {
       _scheduleReconnect();
     }
-    
+
     notifyListeners();
   }
 
   /// Lên lịch reconnect
   void _scheduleReconnect() {
     _stopReconnectTimer();
-    
+
     const reconnectDelay = Duration(seconds: 3);
-    debugPrint('🔄 [VideoFrameService] Scheduling reconnect in ${reconnectDelay.inSeconds}s...');
-    
+    debugPrint(
+      '🔄 [VideoFrameService] Scheduling reconnect in ${reconnectDelay.inSeconds}s...',
+    );
+
     _reconnectTimer = Timer(reconnectDelay, () {
       if (_shouldReconnect && !_isConnected) {
         connect();

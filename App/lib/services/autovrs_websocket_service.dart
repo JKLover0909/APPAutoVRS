@@ -5,7 +5,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:flutter/foundation.dart';
 
 class AutoVRSWebSocketService extends ChangeNotifier {
-  static const String defaultServerUrl = 'ws://192.168.10.169:12345/';
+  static const String defaultServerUrl = 'ws://5d0fc6ea5f81.ngrok-free.app/';
 
   WebSocketChannel? _channel;
   StreamSubscription? _subscription;
@@ -153,7 +153,8 @@ class AutoVRSWebSocketService extends ChangeNotifier {
         try {
           final data = jsonDecode(message);
           if (data is Map<String, dynamic>) {
-            final type = data['type'];
+            final type =
+                data['type'] ?? data['command']; // Hỗ trợ cả type và command
             if (type == 'info' || type == 'connection') {
               // Xử lý thông tin camera hoặc kết nối
               debugPrint('--- Thông tin từ Server ---');
@@ -174,7 +175,7 @@ class AutoVRSWebSocketService extends ChangeNotifier {
             } else if (type == 'pong') {
               _handlePong(data);
             } else {
-              debugPrint('📩 Message type: $type');
+              debugPrint('📩 Message type/command: $type');
             }
           } else {
             debugPrint('❌ JSON không phải Map: $data');
@@ -417,7 +418,7 @@ class AutoVRSWebSocketService extends ChangeNotifier {
     }
 
     final message = {
-      'type': 'capture_image',
+      'command': 'capture_image',
       'request_id': 'capture_${DateTime.now().millisecondsSinceEpoch}',
       'enable_detection': enableDetection,
       if (filename != null) 'filename': filename,
@@ -434,7 +435,7 @@ class AutoVRSWebSocketService extends ChangeNotifier {
       throw Exception('Not connected to server');
     }
 
-    final message = {'type': 'get_status'};
+    final message = {'command': 'get_status'};
 
     _channel!.sink.add(jsonEncode(message));
   }
@@ -446,7 +447,7 @@ class AutoVRSWebSocketService extends ChangeNotifier {
     }
 
     final message = {
-      'type': 'set_detection',
+      'command': 'set_detection',
       'request_id': 'detection_${DateTime.now().millisecondsSinceEpoch}',
       'enabled': enabled,
     };
@@ -470,7 +471,7 @@ class AutoVRSWebSocketService extends ChangeNotifier {
     if (!_isConnected || _channel == null) return;
 
     final message = {
-      'type': 'ping',
+      'command': 'ping',
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     };
 

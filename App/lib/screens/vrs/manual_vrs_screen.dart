@@ -15,7 +15,7 @@ class ManualVRSScreen extends StatefulWidget {
 }
 
 class _ManualVRSScreenState extends State<ManualVRSScreen> {
-  double _magnification = 140;
+  double _magnification = 100;
   int _currentBoard = 4;
   final int _totalBoards = 25;
 
@@ -376,15 +376,29 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                                                 BorderRadius.circular(
                                                                   8,
                                                                 ),
-                                                            child: Image.memory(
-                                                              webSocketService
-                                                                  .capturedImage!,
-                                                              fit: BoxFit.cover,
-                                                              width: squareSize,
-                                                              height:
-                                                                  squareSize,
-                                                              gaplessPlayback:
-                                                                  true,
+                                                            child: InteractiveViewer(
+                                                              panEnabled:
+                                                                  _magnification >
+                                                                  100,
+                                                              scaleEnabled:
+                                                                  false,
+                                                              child: Transform.scale(
+                                                                scale:
+                                                                    _magnification /
+                                                                    100.0,
+                                                                child: Image.memory(
+                                                                  webSocketService
+                                                                      .capturedImage!,
+                                                                  fit: BoxFit
+                                                                      .cover,
+                                                                  width:
+                                                                      squareSize,
+                                                                  height:
+                                                                      squareSize,
+                                                                  gaplessPlayback:
+                                                                      true,
+                                                                ),
+                                                              ),
                                                             ),
                                                           );
                                                         } else if (!_hasAnalysisResult &&
@@ -398,15 +412,29 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                                                 BorderRadius.circular(
                                                                   8,
                                                                 ),
-                                                            child: Image.memory(
-                                                              webSocketService
-                                                                  .displayImage!,
-                                                              fit: BoxFit.cover,
-                                                              width: squareSize,
-                                                              height:
-                                                                  squareSize,
-                                                              gaplessPlayback:
-                                                                  true, // Optimize for smooth video playback
+                                                            child: InteractiveViewer(
+                                                              panEnabled:
+                                                                  _magnification >
+                                                                  100,
+                                                              scaleEnabled:
+                                                                  false,
+                                                              child: Transform.scale(
+                                                                scale:
+                                                                    _magnification /
+                                                                    100.0,
+                                                                child: Image.memory(
+                                                                  webSocketService
+                                                                      .displayImage!,
+                                                                  fit: BoxFit
+                                                                      .cover,
+                                                                  width:
+                                                                      squareSize,
+                                                                  height:
+                                                                      squareSize,
+                                                                  gaplessPlayback:
+                                                                      true, // Optimize for smooth video playback
+                                                                ),
+                                                              ),
                                                             ),
                                                           );
                                                         } else if (frameData !=
@@ -416,14 +444,28 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                                                 BorderRadius.circular(
                                                                   8,
                                                                 ),
-                                                            child: Image.memory(
-                                                              frameData,
-                                                              fit: BoxFit.cover,
-                                                              width: squareSize,
-                                                              height:
-                                                                  squareSize,
-                                                              gaplessPlayback:
-                                                                  true, // Optimize for smooth video playback
+                                                            child: InteractiveViewer(
+                                                              panEnabled:
+                                                                  _magnification >
+                                                                  100,
+                                                              scaleEnabled:
+                                                                  false,
+                                                              child: Transform.scale(
+                                                                scale:
+                                                                    _magnification /
+                                                                    100.0,
+                                                                child: Image.memory(
+                                                                  frameData,
+                                                                  fit: BoxFit
+                                                                      .cover,
+                                                                  width:
+                                                                      squareSize,
+                                                                  height:
+                                                                      squareSize,
+                                                                  gaplessPlayback:
+                                                                      true, // Optimize for smooth video playback
+                                                                ),
+                                                              ),
                                                             ),
                                                           );
                                                         } else if (webSocketService
@@ -817,24 +859,71 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                         'Độ phóng đại',
                                         style: TextStyle(fontSize: 14),
                                       ),
-                                      Text(
-                                        '${_magnification.round()}x',
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                        ),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            '${_magnification.round()}%',
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          // Reset zoom button
+                                          InkWell(
+                                            onTap: () {
+                                              setState(() {
+                                                _magnification = 100;
+                                              });
+                                              debugPrint(
+                                                '🔍 Zoom reset to 100%',
+                                              );
+                                            },
+                                            child: Container(
+                                              padding: const EdgeInsets.all(4),
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey.withOpacity(
+                                                  0.2,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: const Icon(
+                                                Icons.center_focus_strong,
+                                                size: 16,
+                                                color: Colors.grey,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
                                   const SizedBox(height: 8),
-                                  Slider(
-                                    value: _magnification,
-                                    min: 50,
-                                    max: 200,
-                                    divisions: 30,
-                                    onChanged: (value) {
-                                      setState(() => _magnification = value);
-                                    },
+                                  SliderTheme(
+                                    data: SliderTheme.of(context).copyWith(
+                                      activeTrackColor: Colors.blue,
+                                      inactiveTrackColor: Colors.grey
+                                          .withOpacity(0.3),
+                                      thumbColor: Colors.blue,
+                                      overlayColor: Colors.blue.withOpacity(
+                                        0.2,
+                                      ),
+                                      trackHeight: 4,
+                                    ),
+                                    child: Slider(
+                                      value: _magnification,
+                                      min: 50,
+                                      max: 300,
+                                      divisions: 50,
+                                      label: '${_magnification.round()}%',
+                                      onChanged: (value) {
+                                        setState(() => _magnification = value);
+                                        debugPrint(
+                                          '🔍 Zoom level changed to: ${_magnification.round()}%',
+                                        );
+                                      },
+                                    ),
                                   ),
                                 ],
                               ),
