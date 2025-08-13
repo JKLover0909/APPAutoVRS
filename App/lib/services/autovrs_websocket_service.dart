@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:flutter/foundation.dart';
 
 class AutoVRSWebSocketService extends ChangeNotifier {
-  static const String defaultServerUrl = 'wss://5d0fc6ea5f81.ngrok-free.app/';
+  static const String defaultServerUrl = 'ws://192.168.10.169:12345/';
 
   WebSocketChannel? _channel;
   StreamSubscription? _subscription;
@@ -134,33 +135,58 @@ class AutoVRSWebSocketService extends ChangeNotifier {
   /// Xử lý message từ server
   void _handleMessage(dynamic message) {
     try {
-      final data = jsonDecode(message.toString());
-      final messageType = data['type'];
-
-      debugPrint('📥 Message received: $messageType');
-
-      switch (messageType) {
-        case 'video_frame':
-          _handleVideoFrame(data);
-          break;
-        case 'capture_response':
-          debugPrint('📥 CAPTURE_RESPONSE received!');
-          _handleCaptureResponse(data);
-          break;
-        case 'connection':
-          _handleConnectionMessage(data);
-          break;
-        case 'camera_status':
-          _handleCameraStatus(data);
-          break;
-        case 'pong':
-          _handlePong(data);
-          break;
-        default:
-          debugPrint('Unknown message type: $messageType');
+      if (message is Uint8List) {
+        // Nếu là dữ liệu nhị phân (ảnh JPEG)
+        debugPrint('🖼️ Received JPEG frame (${message.length} bytes)');
+        // TODO: Xử lý hiển thị ảnh lên UI hoặc lưu frame
+        // Ví dụ: _currentFrame = message;
+        _currentFrame = message;
+        _currentFrameNotifier.value = message;
+        _frameCount++;
+        _frameCountNotifier.value = _frameCount;
+        optimizeMemory();
+        if (_frameCount % 5 == 0) notifyListeners();
+        if (_frameCount % 30 == 0)
+          debugPrint('📹 Frame processed: $_frameCount');
+      } else if (message is String) {
+        // Nếu là text (JSON)
+        try {
+          final data = jsonDecode(message);
+          if (data is Map<String, dynamic>) {
+            final type = data['type'];
+            if (type == 'info' || type == 'connection') {
+              // Xử lý thông tin camera hoặc kết nối
+              debugPrint('--- Thông tin từ Server ---');
+              debugPrint('  Serial Number: ${data['serial_number']}');
+              debugPrint('  Sensor: ${data['sensor_name']}');
+              debugPrint(
+                '  Max Resolution: ${data['max_width']}x${data['max_height']}',
+              );
+              debugPrint('---------------------------------');
+              _handleConnectionMessage(data);
+            } else if (type == 'video_frame') {
+              _handleVideoFrame(data);
+            } else if (type == 'capture_response' || type == 'ai_detection') {
+              debugPrint('📥 CAPTURE_RESPONSE/AI_DETECTION received!');
+              _handleCaptureResponse(data);
+            } else if (type == 'camera_status') {
+              _handleCameraStatus(data);
+            } else if (type == 'pong') {
+              _handlePong(data);
+            } else {
+              debugPrint('📩 Message type: $type');
+            }
+          } else {
+            debugPrint('❌ JSON không phải Map: $data');
+          }
+        } catch (e) {
+          debugPrint('❌ Không parse được JSON: $message');
+        }
+      } else {
+        debugPrint('❓ Message không xác định kiểu: $message');
       }
     } catch (e) {
-      debugPrint('Error handling message: $e');
+      debugPrint('❌ Lỗi khi xử lý message: $e');
     }
   }
 
@@ -205,7 +231,7 @@ class AutoVRSWebSocketService extends ChangeNotifier {
   }
 
   /// Xử lý response của capture request
-  void _handleCaptureResponse(Map<String, dynamic> data) {
+  Future<void> _handleCaptureResponse(Map<String, dynamic> data) async {
     debugPrint('🚀 _handleCaptureResponse CALLED');
     debugPrint('🚀 Data keys: ${data.keys.toList()}');
 
@@ -236,16 +262,28 @@ class AutoVRSWebSocketService extends ChangeNotifier {
         debugPrint('🔍 NO DETECTION RESULTS in response');
       }
 
-      // Xử lý ảnh base64 nếu có
-      final imageData = data['image_data'] as String?;
+      // Xử lý ảnh base64 nếu có - kiểm tra nhiều trường có thể
+      final imageData =
+          data['image_data'] as String? ??
+          data['processed_image_base64'] as String? ??
+          data['processed_image'] as String?;
+      debugPrint(
+        '🔍 Image data received: ${imageData != null ? 'YES (${imageData.length} chars)' : 'NO'}',
+      );
+      debugPrint('🔍 Available data keys: ${data.keys.toList()}');
 
       if (imageData != null && imageData.isNotEmpty) {
         try {
           _capturedImage = base64Decode(imageData);
           _isViewingCapturedImage = true;
+          debugPrint('🔍 Decoded image: ${_capturedImage!.length} bytes');
+          if (_capturedImage != null) {
+            await _saveCapturedImageToFolder(_capturedImage!);
+          }
           notifyListeners();
         } catch (e) {
           _lastError = 'Failed to decode captured image: $e';
+          debugPrint('❌ Failed to decode image: $e');
         }
       } else {
         debugPrint('❌ No image data received or empty');
@@ -253,6 +291,51 @@ class AutoVRSWebSocketService extends ChangeNotifier {
     } else {
       _lastError = message;
       notifyListeners();
+    }
+  }
+
+  /// Lưu ảnh capture vào thư mục images_ai
+  Future<void> _saveCapturedImageToFolder(Uint8List imageBytes) async {
+    debugPrint('🖼️ Starting to save image: ${imageBytes.length} bytes');
+    try {
+      final folderPath =
+          'C:/Users/sonng/OneDrive/Desktop/APPAutoVRS/BE-AutoVRS/images_ai';
+      debugPrint('🖼️ Target folder: $folderPath');
+
+      final dir = Directory(folderPath);
+      if (!await dir.exists()) {
+        debugPrint('🖼️ Creating directory...');
+        await dir.create(recursive: true);
+        debugPrint('🖼️ Directory created successfully');
+      } else {
+        debugPrint('🖼️ Directory already exists');
+      }
+
+      final now = DateTime.now();
+      final fileName =
+          'capture_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}.jpg';
+      final filePath = '$folderPath/$fileName';
+      debugPrint('🖼️ Full file path: $filePath');
+
+      final file = File(filePath);
+
+      // Test write simple content first
+      debugPrint('🖼️ Testing file write...');
+      await file.writeAsString('test');
+      debugPrint('🖼️ Test write successful, now writing image bytes...');
+
+      await file.writeAsBytes(imageBytes);
+
+      // Verify file was written
+      final fileExists = await file.exists();
+      final fileSize = await file.length();
+      debugPrint(
+        '🖼️ ✅ File written - exists: $fileExists, size: $fileSize bytes',
+      );
+      debugPrint('🖼️ ✅ Successfully saved captured image to: $filePath');
+    } catch (e) {
+      debugPrint('❌ Error saving captured image: $e');
+      debugPrint('❌ Stack trace: ${StackTrace.current}');
     }
   }
 

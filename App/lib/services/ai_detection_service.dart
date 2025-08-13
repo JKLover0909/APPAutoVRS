@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 
@@ -116,6 +117,11 @@ class AIDetectionService extends ChangeNotifier {
           '✅ AI detection successful: ${_lastResult!.detections.length} defects found',
         );
 
+        // Lưu ảnh processed nếu có
+        if (_lastResult!.processedImage != null) {
+          await _saveProcessedImage(_lastResult!.processedImage!);
+        }
+
         return _lastResult;
       } else {
         _lastError = 'HTTP ${response.statusCode}: ${response.body}';
@@ -129,6 +135,47 @@ class AIDetectionService extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// Lưu ảnh đã xử lý AI detection vào thư mục
+  Future<void> _saveProcessedImage(Uint8List imageBytes) async {
+    debugPrint(
+      '🖼️ Starting to save processed image: ${imageBytes.length} bytes',
+    );
+    try {
+      final folderPath =
+          'C:/Users/sonng/OneDrive/Desktop/APPAutoVRS/BE-AutoVRS/images_ai';
+      debugPrint('🖼️ Target folder: $folderPath');
+
+      final dir = Directory(folderPath);
+      final dirExists = await dir.exists();
+      debugPrint('🖼️ Directory exists: $dirExists');
+
+      if (!dirExists) {
+        debugPrint('🖼️ Creating directory...');
+        await dir.create(recursive: true);
+        debugPrint('🖼️ Directory created successfully');
+      }
+
+      final now = DateTime.now();
+      final fileName =
+          'ai_processed_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}.jpg';
+      final filePath = '$folderPath/$fileName';
+      debugPrint('🖼️ Full file path: $filePath');
+
+      final file = File(filePath);
+      await file.writeAsBytes(imageBytes);
+
+      // Verify file was written
+      final fileExists = await file.exists();
+      final fileSize = await file.length();
+      debugPrint(
+        '🖼️ ✅ File written - exists: $fileExists, size: $fileSize bytes',
+      );
+      debugPrint('🖼️ ✅ Successfully saved AI processed image to: $filePath');
+    } catch (e) {
+      debugPrint('❌ Error saving processed image: $e');
     }
   }
 

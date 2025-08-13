@@ -13,6 +13,7 @@ from datetime import datetime
 import logging
 from typing import List, Dict, Any
 import json
+import os
 
 # Cấu hình logging
 logging.basicConfig(level=logging.INFO)
@@ -44,7 +45,7 @@ class DetectionResult(BaseModel):
     timestamp: str
 
 class AIDetectionService:
-    def __init__(self, model_path: str = "best.onnx"):
+    def __init__(self, model_path: str = "yolov11n.onnx"):
         self.model_path = model_path
         self.session = None
         self.input_name = None
@@ -76,15 +77,35 @@ class AIDetectionService:
     
     def load_model(self):
         """Load ONNX model"""
+        logger.info(f"🚀 Loading model from: {self.model_path}")
+        logger.info(f"🚀 Model file exists: {os.path.exists(self.model_path)}")
+        
+        if os.path.exists(self.model_path):
+            file_size = os.path.getsize(self.model_path)
+            logger.info(f"🚀 Model file size: {file_size} bytes")
+        
         try:
+            logger.info("🚀 Creating ONNX inference session...")
             self.session = ort.InferenceSession(self.model_path)
             self.input_name = self.session.get_inputs()[0].name
             self.output_names = [output.name for output in self.session.get_outputs()]
+            
             logger.info(f"✅ Model loaded successfully: {self.model_path}")
-            logger.info(f"Input name: {self.input_name}")
-            logger.info(f"Output names: {self.output_names}")
+            logger.info(f"✅ Input name: {self.input_name}")
+            logger.info(f"✅ Output names: {self.output_names}")
+            logger.info(f"✅ Input shape: {self.session.get_inputs()[0].shape}")
+            
+            # Test if model is working
+            dummy_input = np.random.random((1, 3, 640, 640)).astype(np.float32)
+            logger.info("🧪 Testing model with dummy input...")
+            test_outputs = self.session.run(self.output_names, {self.input_name: dummy_input})
+            logger.info(f"🧪 Test successful - got {len(test_outputs)} outputs")
+            
         except Exception as e:
             logger.error(f"❌ Failed to load model: {e}")
+            logger.error(f"❌ Error type: {type(e)}")
+            import traceback
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
             self.session = None
     
     def preprocess_image(self, image: np.ndarray, input_size: tuple = (640, 640)):
@@ -107,53 +128,106 @@ class AIDetectionService:
         return batched
     
     def postprocess_outputs(self, outputs, confidence_threshold=0.5, iou_threshold=0.4):
-        """Xử lý output từ ONNX model"""
+        """Xử lý output từ ONNX model YOLOv11"""
         detections = []
         
-        # Giả sử output format: [batch, num_detections, 85] (4 bbox + 1 confidence + 80 classes)
-        # Hoặc format khác tùy theo model
+        logger.info(f"🔍 Processing {len(outputs)} outputs")
+        for i, output in enumerate(outputs):
+            logger.info(f"🔍 Output {i} shape: {output.shape if hasattr(output, 'shape') else 'No shape attr'}")
+        
+        # YOLOv11 có format khác với YOLOv5/v8
+        # Thử xử lý output chính (thường là output cuối cùng hoặc có shape lớn nhất)
         try:
-            predictions = outputs[0][0]  # Remove batch dimension
+            # Tìm output có shape phù hợp với detections
+            main_output = None
+            for output in outputs:
+                if hasattr(output, 'shape') and len(output.shape) >= 2:
+                    logger.info(f"🔍 Candidate output shape: {output.shape}")
+                    # YOLOv11 thường có format [batch, num_classes + 4, num_anchors]
+                    # hoặc [batch, num_anchors, num_classes + 4]
+                    if output.shape[-1] > 80 or output.shape[1] > 80:  # Có thể chứa classes
+                        main_output = output
+                        break
             
-            for detection in predictions:
-                # Format: [x_center, y_center, width, height, confidence, class_scores...]
-                if len(detection) >= 6:
-                    x_center, y_center, width, height, confidence = detection[:5]
-                    class_scores = detection[5:]
+            if main_output is None:
+                # Fallback: sử dụng output đầu tiên
+                main_output = outputs[0]
+                logger.warning(f"🔍 Using fallback output with shape: {main_output.shape}")
+            
+            logger.info(f"🔍 Selected output shape: {main_output.shape}")
+            
+            # Xử lý output
+            if len(main_output.shape) == 3:  # [batch, features, anchors]
+                predictions = main_output[0]  # Remove batch dimension
+                logger.info(f"🔍 Predictions shape after removing batch: {predictions.shape}")
+                
+                # Transpose nếu cần: [features, anchors] -> [anchors, features]
+                if predictions.shape[0] > predictions.shape[1]:
+                    predictions = predictions.T
+                    logger.info(f"🔍 Transposed predictions shape: {predictions.shape}")
+                
+                # Bây giờ predictions có shape [num_anchors, num_features]
+                num_anchors, num_features = predictions.shape
+                logger.info(f"🔍 Processing {num_anchors} anchors with {num_features} features each")
+                
+                for i in range(num_anchors):
+                    detection = predictions[i]
                     
-                    if confidence >= confidence_threshold:
-                        class_id = np.argmax(class_scores)
-                        class_confidence = class_scores[class_id]
+                    if num_features >= 6:  # Ít nhất cần 4 bbox + 1 conf + 1 class
+                        # Format: [x_center, y_center, width, height, confidence, class_scores...]
+                        x_center, y_center, width, height = detection[:4]
+                        confidence = detection[4]
                         
-                        if class_confidence >= confidence_threshold:
-                            # Convert to corner coordinates
-                            x1 = int(x_center - width / 2)
-                            y1 = int(y_center - height / 2)
-                            x2 = int(x_center + width / 2)
-                            y2 = int(y_center + height / 2)
+                        logger.debug(f"🔍 Detection {i}: bbox=({x_center:.2f}, {y_center:.2f}, {width:.2f}, {height:.2f}), conf={confidence:.3f}")
+                        
+                        if confidence >= confidence_threshold:
+                            if num_features > 5:
+                                class_scores = detection[5:]
+                                class_id = np.argmax(class_scores)
+                                class_confidence = class_scores[class_id]
+                            else:
+                                # Nếu không có class scores, dùng confidence chung
+                                class_id = 0
+                                class_confidence = confidence
                             
-                            # Convert class_id to int
-                            class_id_int = int(class_id)
-                            
-                            detections.append({
-                                'bbox': [x1, y1, x2, y2],
-                                'confidence': float(confidence),
-                                'class_id': class_id_int,
-                                'class_name': self.class_names.get(class_id_int, 'unknown'),
-                                'class_name_vi': self.class_names_vi.get(class_id_int, 'Không xác định'),
-                                'coordinates': {
-                                    'x': x1,
-                                    'y': y1,
-                                    'width': int(width),
-                                    'height': int(height)
-                                }
-                            })
+                            if class_confidence >= confidence_threshold:
+                                # Convert to corner coordinates (scale by 640 if normalized)
+                                scale = 640  # Assuming input was 640x640
+                                x1 = int((x_center - width / 2) * scale)
+                                y1 = int((y_center - height / 2) * scale)
+                                x2 = int((x_center + width / 2) * scale)
+                                y2 = int((y_center + height / 2) * scale)
+                                
+                                # Convert class_id to int
+                                class_id_int = int(class_id)
+                                
+                                logger.info(f"✅ Valid detection {i}: class={class_id_int}, conf={confidence:.3f}, bbox=({x1},{y1},{x2},{y2})")
+                                
+                                detections.append({
+                                    'bbox': [x1, y1, x2, y2],
+                                    'confidence': float(confidence),
+                                    'class_id': class_id_int,
+                                    'class_name': self.class_names.get(class_id_int, 'unknown'),
+                                    'class_name_vi': self.class_names_vi.get(class_id_int, 'Không xác định'),
+                                    'coordinates': {
+                                        'x': x1,
+                                        'y': y1,
+                                        'width': int(abs(x2 - x1)),
+                                        'height': int(abs(y2 - y1))
+                                    }
+                                })
+            
+            logger.info(f"🔍 Found {len(detections)} raw detections before NMS")
             
             # Apply NMS (Non-Maximum Suppression) if needed
-            detections = self.apply_nms(detections, iou_threshold)
+            if len(detections) > 0:
+                detections = self.apply_nms(detections, iou_threshold)
+                logger.info(f"🔍 {len(detections)} detections after NMS")
             
         except Exception as e:
-            logger.error(f"Error in postprocessing: {e}")
+            logger.error(f"❌ Error in postprocessing: {e}")
+            import traceback
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
             
         return detections
     
@@ -231,21 +305,39 @@ class AIDetectionService:
     
     def detect_defects(self, image: np.ndarray, confidence_threshold=0.5, iou_threshold=0.4):
         """Chạy AI detection trên ảnh"""
-        if self.session is None:
-            return [], image, {"error": "Model not loaded"}
+        logger.info(f"🔍 Starting detection - model loaded: {self.session is not None}")
+        logger.info(f"🔍 Image shape: {image.shape}")
+        logger.info(f"🔍 Confidence threshold: {confidence_threshold}")
+        logger.info(f"🔍 IoU threshold: {iou_threshold}")
         
+        if self.session is None:
+            logger.warning("⚠️ Model not loaded - returning empty results")
+            return [], image, {"error": "Model not loaded"}
+
         try:
             # Preprocess
+            logger.info("🔍 Preprocessing image...")
             input_tensor = self.preprocess_image(image)
+            logger.info(f"🔍 Input tensor shape: {input_tensor.shape}")
             
             # Run inference
+            logger.info("🔍 Running inference...")
             outputs = self.session.run(self.output_names, {self.input_name: input_tensor})
+            logger.info(f"🔍 Inference complete - outputs count: {len(outputs)}")
+            for i, output in enumerate(outputs):
+                try:
+                    logger.info(f"🔍 Output {i} shape: {output.shape}")
+                except:
+                    logger.info(f"🔍 Output {i} type: {type(output)}")
             
             # Postprocess
+            logger.info("🔍 Postprocessing outputs...")
             detections = self.postprocess_outputs(outputs, confidence_threshold, iou_threshold)
+            logger.info(f"🔍 Raw detections found: {len(detections)}")
             
             # Draw results
             result_image = self.draw_detections(image, detections)
+            logger.info(f"🔍 Final detections after NMS: {len(detections)}")
             
             # Statistics
             stats = {
@@ -329,5 +421,5 @@ async def ai_detection(request: DetectionRequest):
         raise HTTPException(status_code=500, detail=f"Detection failed: {str(e)}")
 
 if __name__ == "__main__":
-    import uvicorn
+    import uvicorn # type: ignore
     uvicorn.run(app, host="0.0.0.0", port=8082, log_level="info")

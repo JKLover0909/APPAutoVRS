@@ -41,7 +41,7 @@ class DetectionResult(BaseModel):
     timestamp: str
 
 class AIDetectionService:
-    def __init__(self, model_path: str = "best.onnx"):
+    def __init__(self, model_path: str = "yolov11n.onnx"):
         self.model_path = model_path
         self.session = None
         self.input_name = None
@@ -255,7 +255,7 @@ if __name__ == "__main__":
     import uvicorn
     
     print("🤖 Starting AutoVRS AI Detection API...")
-    print("📁 Make sure 'best.onnx' file is in the same directory (optional for demo)")
+    print("📁 Make sure 'yolov11.onnx' file is in the same directory (optional for demo)")
     print("📡 API will be available at: http://localhost:8082")
     print("📋 API Documentation: http://localhost:8082/docs")
     print("🛑 Press Ctrl+C to stop")
