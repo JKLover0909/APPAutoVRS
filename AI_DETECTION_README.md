@@ -2,6 +2,7 @@
 
 ## 📋 Tổng quan
 Tích hợp AI Detection với backend Python và Flutter app để phân tích lỗi trên PCB với model ONNX.
+autovrs_websocket_service
 https://5d0fc6ea5f81.ngrok-free.app
 
 ## 🔧 Cài đặt
