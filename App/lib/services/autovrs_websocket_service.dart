@@ -5,7 +5,9 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:flutter/foundation.dart';
 
 class AutoVRSWebSocketService extends ChangeNotifier {
-  static const String defaultServerUrl = 'ws://5d0fc6ea5f81.ngrok-free.app/';
+  static const String defaultServerUrl = 'ws://127.0.0.1:12345/';
+  //ws://127.0.0.1:12345/
+  //wss://5d0fc6ea5f81.ngrok-free.app/
 
   WebSocketChannel? _channel;
   StreamSubscription? _subscription;
