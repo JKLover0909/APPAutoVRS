@@ -3,12 +3,14 @@ import '../services/local_database_service.dart';
 
 class VRSProvider extends ChangeNotifier {
   final LocalDatabaseService _db = LocalDatabaseService();
-  
+
   // Current system status
   String _systemStatus = 'Loading...';
   bool _isAutoMode = true;
   String _currentModel = '';
   String _currentModelName = '';
+  String _currentLot = '';
+  String _currentBoard = '';
   int _totalCount = 0;
   int _okCount = 0;
   int _ngCount = 0;
@@ -23,6 +25,8 @@ class VRSProvider extends ChangeNotifier {
   bool _isInitialized = false;
 
   // Getters
+  String get currentLot => _currentLot;
+  String get currentBoard => _currentBoard;
   String get systemStatus => _systemStatus;
   bool get isAutoMode => _isAutoMode;
   String get currentModel => _currentModel;
@@ -41,7 +45,7 @@ class VRSProvider extends ChangeNotifier {
   // Initialize provider with database data
   Future<void> initialize() async {
     if (_isInitialized) return;
-    
+
     try {
       await _loadSystemConfig();
       await _loadCurrentModel();
@@ -77,8 +81,8 @@ class VRSProvider extends ChangeNotifier {
         if (modelId != null) {
           final model = await _db.getModelById(modelId);
           if (model != null) {
-            _currentModel = model['id'].toString();
-            _currentModelName = 'Model ${model['id']}';
+            _currentModel = model['id_model'].toString();
+            _currentModelName = 'Model ${model['id_model']}';
           }
         }
       }
@@ -92,8 +96,12 @@ class VRSProvider extends ChangeNotifier {
       // Calculate total statistics from all boards
       final allBoards = await _db.getAllBoards();
       _totalCount = allBoards.length;
-      _okCount = allBoards.where((board) => (board['defect_quantity'] as int) == 0).length;
-      _ngCount = allBoards.where((board) => (board['defect_quantity'] as int) > 0).length;
+      _okCount = allBoards
+          .where((board) => (board['defect_quantity'] as int) == 0)
+          .length;
+      _ngCount = allBoards
+          .where((board) => (board['defect_quantity'] as int) > 0)
+          .length;
     } catch (e) {
       debugPrint('Error loading statistics: $e');
     }
@@ -113,15 +121,29 @@ class VRSProvider extends ChangeNotifier {
 
   Future<void> setCurrentModel(String modelId) async {
     try {
-      final id = int.tryParse(modelId);
-      if (id != null) {
-        final model = await _db.getModelById(id);
-        if (model != null) {
-          _currentModel = model['id'].toString();
-          _currentModelName = 'Model ${model['id']}';
-          await _db.updateConfig('current_model', modelId);
-          notifyListeners();
+      final dbService = LocalDatabaseService();
+      final model = await dbService.getModelById(int.parse(modelId));
+
+      if (model != null) {
+        _currentModel = model['id_model'].toString();
+        _currentModelName = 'Model ${model['id_model']}';
+
+        // Lấy lô đầu tiên liên kết với model
+        final lot = await dbService.getFirstLotByModelId(modelId);
+        if (lot != null) {
+          _currentLot = lot['id_lot'].toString();
+
+          // Lấy bo đầu tiên liên kết với lô
+          final board = await dbService.getFirstBoardByLotId(_currentLot);
+          _currentBoard = board != null
+              ? board['id_board'].toString()
+              : 'Chưa có';
+        } else {
+          _currentLot = 'Chưa có';
+          _currentBoard = 'Chưa có';
         }
+
+        notifyListeners();
       }
     } catch (e) {
       debugPrint('Error setting current model: $e');

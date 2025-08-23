@@ -80,75 +80,40 @@ class AIDetectionService:
             logger.error(f"❌ Failed to load model: {e}")
             self.model = None
 
-    def detect_defects(self, image: np.ndarray, confidence_threshold=0.25, iou_threshold=0.45):
-        """Chạy AI detection với Ultralytics YOLO"""
+    def detect_defects_from_file(self, image_path: str, confidence_threshold=0.1, iou_threshold=0.45):
+        """Chạy AI detection với file path - Logic giống CodeAI.ipynb"""
         if self.model is None:
             logger.error("❌ Model not loaded")
-            return [], image, {"error": "Model not loaded"}
+            return [], None, {"error": "Model not loaded"}
             
-        logger.info(f"🔍 Starting Ultralytics YOLO detection")
-        logger.info(f"🔍 Image shape: {image.shape}")
-        logger.info(f"🔍 Image dtype: {image.dtype}")
-        logger.info(f"🔍 Image min/max: {image.min()}/{image.max()}")
+        logger.info(f"🔍 Starting Ultralytics YOLO detection from file")
+        logger.info(f"🔍 Image path: {image_path}")
         logger.info(f"🔍 Confidence threshold: {confidence_threshold}")
         logger.info(f"🔍 IoU threshold: {iou_threshold}")
         
         try:
-            # DEBUG: Lưu ảnh tạm để so sánh với code riêng
-            temp_path = r"C:\Users\sonng\Code\APPAutoVRS\BE-AutoVRS\temp_debug_api.jpg"
-            cv2.imwrite(temp_path, image)
-            logger.info(f"🧪 Saved temp image for debug: {temp_path}")
-            
-            # Method 1: Thử với file path (giống code riêng)
-            print("🔍 Method 1: Đang thực hiện nhận diện với file path...")
-            results_path = self.model(temp_path, conf=confidence_threshold, iou=iou_threshold)
-            print(f"✅ Method 1 hoàn tất! Boxes found: {len(results_path[0].boxes) if results_path[0].boxes is not None else 0}")
-            
-            # Method 2: Thử với numpy array trực tiếp
-            print("🔍 Method 2: Đang thực hiện nhận diện với numpy array...")
-            results_array = self.model(image, conf=confidence_threshold, iou=iou_threshold)
-            print(f"✅ Method 2 hoàn tất! Boxes found: {len(results_array[0].boxes) if results_array[0].boxes is not None else 0}")
-            
-            # Method 3: Thử với BGR -> RGB conversion
-            print("🔍 Method 3: Đang thực hiện nhận diện với RGB conversion...")
-            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            results_rgb = self.model(image_rgb, conf=confidence_threshold, iou=iou_threshold)
-            print(f"✅ Method 3 hoàn tất! Boxes found: {len(results_rgb[0].boxes) if results_rgb[0].boxes is not None else 0}")
-            
-            # Chọn kết quả tốt nhất
-            results = results_path  # Bắt đầu với file path vì nó hoạt động trong code riêng
-            method_used = "file_path"
-            
-            if results_array[0].boxes is not None and len(results_array[0].boxes) > 0:
-                results = results_array
-                method_used = "numpy_array"
-            elif results_rgb[0].boxes is not None and len(results_rgb[0].boxes) > 0:
-                results = results_rgb
-                method_used = "rgb_conversion"
-                
-            print(f"🎯 Using method: {method_used}")
+            # Thực hiện nhận diện với mô hình ONNX - Logic giống CodeAI.ipynb
+            print("🔍 Đang thực hiện nhận diện với mô hình ONNX...")
+            results = self.model(image_path, conf=confidence_threshold, iou=iou_threshold)
+            print("✅ Nhận diện hoàn tất!")
             
             # Vẽ kết quả lên ảnh
             annotated_image_bgr = results[0].plot()
             
+            # Hiển thị thông tin chi tiết về các đối tượng được phát hiện
+            print("\n📊 Chi tiết các đối tượng được phát hiện:")
+            print("="*50)
+            
             # Lấy thông tin boxes từ kết quả
             boxes = results[0].boxes
-            
-            # Debug: In ra số lượng boxes chi tiết
-            logger.info(f"🧪 Final boxes: {boxes}")
-            logger.info(f"🧪 Number of boxes detected: {len(boxes) if boxes is not None else 0}")
-            logger.info(f"🧪 Method used: {method_used}")
             
             # Tạo detection results
             detections = []
             
-            if boxes is None or len(boxes) == 0:
-                print("❌ Không phát hiện đối tượng nào!")
-                logger.warning("❌ No objects detected - this might be the issue!")
+            if len(boxes) == 0:
+                print("Không phát hiện đối tượng nào!")
+                logger.warning("❌ No objects detected!")
             else:
-                print("\n📊 Chi tiết các đối tượng được phát hiện:")
-                print("="*50)
-                
                 for i, box in enumerate(boxes):
                     class_id = int(box.cls[0])
                     class_name = self.model.names[class_id]  # Lấy tên class từ model
@@ -176,8 +141,7 @@ class AIDetectionService:
                 'total_defects': len(detections),
                 'defect_types': {},
                 'max_confidence': max([d['confidence'] for d in detections]) if detections else 0.0,
-                'avg_confidence': sum([d['confidence'] for d in detections]) / len(detections) if detections else 0.0,
-                'method_used': method_used  # Thêm thông tin method đã dùng
+                'avg_confidence': sum([d['confidence'] for d in detections]) / len(detections) if detections else 0.0
             }
             
             # Đếm số lượng từng loại defect
@@ -185,12 +149,9 @@ class AIDetectionService:
                 defect_type = d['class_name_vi']
                 stats['defect_types'][defect_type] = stats['defect_types'].get(defect_type, 0) + 1
             
-            print(f"\n📈 Tổng số đối tượng phát hiện được: {len(boxes) if boxes else 0}")
-            logger.info(f"✅ Detection completed: {len(detections)} defects found using {method_used}")
-            
-            # Cleanup temp file
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
+            # So sánh số lượng phát hiện từ mô hình ONNX
+            print(f"\n📈 Tổng số đối tượng phát hiện được: {len(boxes)}")
+            logger.info(f"✅ Detection completed: {len(detections)} defects found")
             
             return detections, annotated_image_bgr, stats
             
@@ -198,7 +159,7 @@ class AIDetectionService:
             logger.error(f"❌ Detection error: {e}")
             import traceback
             logger.error(f"❌ Traceback: {traceback.format_exc()}")
-            return [], image, {"error": str(e)}
+            return [], None, {"error": str(e)}
 
 # Initialize AI service
 ai_service = AIDetectionService()
@@ -236,36 +197,52 @@ async def ai_detection(request: DetectionRequest):
         if image is None:
             raise HTTPException(status_code=400, detail="Invalid image data")
         
+        # Tạo folder Image_input nếu chưa tồn tại
+        input_folder = r"C:\Users\sonng\Code\APPAutoVRS\BE-AutoVRS\Image_input"
+        os.makedirs(input_folder, exist_ok=True)
+        
         # Tạo folder Image_output nếu chưa tồn tại
         output_folder = r"C:\Users\sonng\Code\APPAutoVRS\BE-AutoVRS\Image_output"
         os.makedirs(output_folder, exist_ok=True)
         
         # Tạo tên file với timestamp
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        input_filename = f"ai_input_{timestamp}.jpg"
         processed_filename = f"ai_processed_{timestamp}.jpg"
         
-        # Run AI detection
-        detections, result_image, stats = ai_service.detect_defects(
-            image, 
+        # Bước 1: Lưu ảnh gốc từ base64 vào Image_input folder
+        input_image_path = os.path.join(input_folder, input_filename)
+        cv2.imwrite(input_image_path, image)
+        logger.info(f"💾 Saved input image to: {input_image_path}")
+        print(f"✅ Đã lưu ảnh input tại: {input_image_path}")
+        
+        # Bước 2: Chạy AI detection với file path (giống CodeAI.ipynb)
+        detections, result_image, stats = ai_service.detect_defects_from_file(
+            input_image_path, 
             request.confidence_threshold, 
             request.iou_threshold
         )
         
-        # Chỉ lưu ảnh đã xử lý vào Image_output folder
-        output_save_path = os.path.join(output_folder, processed_filename)
-        cv2.imwrite(output_save_path, result_image)
-        logger.info(f"💾 Saved processed image to: {output_save_path}")
-        print(f"✅ Đã lưu ảnh kết quả tại: {output_save_path}")
-        
-        # Encode result image
-        _, buffer = cv2.imencode('.jpg', result_image)
-        result_image_base64 = base64.b64encode(buffer.tobytes()).decode('utf-8')
+        # Bước 3: Lưu ảnh đã xử lý vào Image_output folder
+        if result_image is not None:
+            output_save_path = os.path.join(output_folder, processed_filename)
+            cv2.imwrite(output_save_path, result_image)
+            logger.info(f"💾 Saved processed image to: {output_save_path}")
+            print(f"✅ Đã lưu ảnh kết quả tại: {output_save_path}")
+            
+            # Encode result image
+            _, buffer = cv2.imencode('.jpg', result_image)
+            result_image_base64 = base64.b64encode(buffer.tobytes()).decode('utf-8')
+        else:
+            # Nếu không có result_image, dùng ảnh gốc
+            _, buffer = cv2.imencode('.jpg', image)
+            result_image_base64 = base64.b64encode(buffer.tobytes()).decode('utf-8')
         
         logger.info(f"✅ Detection completed: {len(detections)} defects found")
         
         return DetectionResult(
             success=True,
-            message=f"Detection completed successfully. Found {len(detections)} defects. Image saved: {processed_filename}",
+            message=f"Detection completed successfully. Found {len(detections)} defects. Images saved: {input_filename} → {processed_filename}",
             detections=detections,
             processed_image_base64=result_image_base64,
             statistics=stats,

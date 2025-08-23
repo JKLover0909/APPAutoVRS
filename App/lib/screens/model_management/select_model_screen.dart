@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/vrs_provider.dart';
 import '../../services/local_database_service.dart';
+import '../../main.dart';
 
 class SelectModelScreen extends StatefulWidget {
   const SelectModelScreen({super.key});
@@ -39,7 +40,7 @@ class _SelectModelScreenState extends State<SelectModelScreen> {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(content: Text('Lỗi tải dữ liệu: $e')),
         );
       }
@@ -49,10 +50,10 @@ class _SelectModelScreenState extends State<SelectModelScreen> {
   void _filterModels() {
     final query = _searchController.text.toLowerCase();
     setState(() {
-      _filteredModels = _models
-          .where((model) => 
-              (model['model_id'] ?? '').toLowerCase().contains(query))
-          .toList();
+      _filteredModels = _models.where((model) {
+        final idModelStr = model['id_model']?.toString().toLowerCase() ?? '';
+        return idModelStr.contains(query);
+      }).toList();
     });
   }
 
@@ -105,8 +106,8 @@ class _SelectModelScreenState extends State<SelectModelScreen> {
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator())
                     : _models.isEmpty
-                        ? _buildEmptyState()
-                        : _buildModelTable(),
+                    ? _buildEmptyState()
+                    : _buildModelTable(),
               ),
             ],
           ),
@@ -120,26 +121,16 @@ class _SelectModelScreenState extends State<SelectModelScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            FeatherIcons.package,
-            size: 64,
-            color: Colors.grey.shade400,
-          ),
+          Icon(FeatherIcons.package, size: 64, color: Colors.grey.shade400),
           const SizedBox(height: 16),
           Text(
             'Chưa có mã hàng nào',
-            style: TextStyle(
-              fontSize: 18,
-              color: Colors.grey.shade600,
-            ),
+            style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 8),
           Text(
             'Hãy thêm mã hàng mới để bắt đầu',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey.shade500,
-            ),
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
           ),
           const SizedBox(height: 24),
           ElevatedButton.icon(
@@ -163,25 +154,25 @@ class _SelectModelScreenState extends State<SelectModelScreen> {
         columns: const [
           DataColumn(
             label: Text(
-              'Mã hàng (id_model)',
+              'Mã hàng ',
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
           DataColumn(
             label: Text(
-              'Kích thước đường mạch',
+              'Kích thước Line',
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
           DataColumn(
             label: Text(
-              'Kích thước khoảng trống',
+              'Kích thước Space',
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
           DataColumn(
             label: Text(
-              'Hành động',
+              'Thao tác',
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
@@ -192,10 +183,8 @@ class _SelectModelScreenState extends State<SelectModelScreen> {
                 cells: [
                   DataCell(
                     Text(
-                      model['model_id'] ?? 'Unknown',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w500,
-                      ),
+                      model['id_model']?.toString() ?? 'Unknown',
+                      style: const TextStyle(fontWeight: FontWeight.w500),
                     ),
                   ),
                   DataCell(Text(model['line_size']?.toString() ?? 'N/A')),
@@ -223,47 +212,86 @@ class _SelectModelScreenState extends State<SelectModelScreen> {
   }
 
   void _selectModel(Map<String, dynamic> model) async {
+    // Hiển thị dialog xác nhận
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Xác nhận lựa chọn'),
-        content: Text('Bạn có chắc chắn muốn sử dụng bộ tham số ${model['model_id']}?'),
+        content: Text(
+          'Bạn có chắc chắn muốn sử dụng bộ tham số ${model['id_model'].toString()}?',
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Hủy'),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('Xác nhận'),
           ),
         ],
       ),
     );
 
-    if (confirmed == true && mounted) {
-      try {
-        // Update VRS Provider with selected model
-        final vrsProvider = Provider.of<VRSProvider>(context, listen: false);
-        await vrsProvider.setCurrentModel(model['model_id']);
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Đã chọn Model ${model['model_id']} thành công!'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          context.pop(); // Go back to previous screen
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+    if (confirmed != true || !mounted) return;
+
+    try {
+      // Cập nhật model trong Provider
+      final vrsProvider = Provider.of<VRSProvider>(context, listen: false);
+
+      // Capture router before async gaps to avoid using context after await
+      final router = GoRouter.of(context);
+
+      await vrsProvider.setCurrentModel(model['id_model'].toString());
+
+      // Hiển thị SnackBar **trước khi pop màn hình** using global messenger
+      final snackBar = SnackBar(
+        content: Text(
+          'Đã chọn Model ${model['id_model'].toString()} thành công!',
+        ),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      );
+
+      final messengerState = scaffoldMessengerKey.currentState;
+      if (messengerState != null && messengerState.mounted) {
+        messengerState.showSnackBar(snackBar);
+      } else {
+        // If the messenger isn't ready (rare), schedule the SnackBar for the next frame
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          scaffoldMessengerKey.currentState?.showSnackBar(snackBar);
+        });
+      }
+
+      // Delay một chút để người dùng nhìn thấy SnackBar
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      // Quay lại màn hình trước nếu có thể (use captured router)
+      if (router.canPop()) {
+        router.pop();
+      }
+    } catch (e) {
+      // Hiển thị lỗi nếu có using global messenger
+      if (mounted) {
+        final messengerState = scaffoldMessengerKey.currentState;
+        if (messengerState != null && messengerState.mounted) {
+          messengerState.showSnackBar(
             SnackBar(
               content: Text('Lỗi cập nhật model: $e'),
               backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
             ),
           );
+        } else {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            scaffoldMessengerKey.currentState?.showSnackBar(
+              SnackBar(
+                content: Text('Lỗi cập nhật model: $e'),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          });
         }
       }
     }

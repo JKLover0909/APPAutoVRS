@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_feather_icons/flutter_feather_icons.dart';
+import '../../services/local_database_service.dart';
 import 'package:go_router/go_router.dart';
+import '../../main.dart';
 
 class AddModelScreen extends StatefulWidget {
   const AddModelScreen({super.key});
@@ -209,7 +211,7 @@ class _AddModelScreenState extends State<AddModelScreen> {
       _selectedFile = 'example_gerber_file.gbr';
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    scaffoldMessengerKey.currentState?.showSnackBar(
       const SnackBar(
         content: Text('Chức năng tải file sẽ được triển khai sau'),
         backgroundColor: Colors.orange,
@@ -217,18 +219,54 @@ class _AddModelScreenState extends State<AddModelScreen> {
     );
   }
 
-  void _saveModel() {
-    if (_formKey.currentState!.validate()) {
-      // Simulate saving model
-      ScaffoldMessenger.of(context).showSnackBar(
+  void _saveModel() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final idModel = _modelIdController.text.trim();
+    final lineSize = double.tryParse(_lineSizeController.text.trim());
+    final spaceSize = double.tryParse(_spaceSizeController.text.trim());
+
+    if (lineSize == null || spaceSize == null) {
+      if (!context.mounted) return;
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        const SnackBar(
+          content: Text('Kích thước không hợp lệ'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
+    try {
+      final dbService = LocalDatabaseService();
+      final insertedId = await dbService.insertModel({
+        'id_model': idModel,
+        'line_size': lineSize,
+        'space_size': spaceSize,
+        'url_gerber': _selectedFile,
+      });
+
+      if (!context.mounted) return;
+
+      scaffoldMessengerKey.currentState?.showSnackBar(
         SnackBar(
-          content: Text('Đã lưu model ${_modelIdController.text} thành công!'),
+          content: Text('Đã lưu model $idModel thành công!'),
           backgroundColor: Colors.green,
         ),
       );
 
-      // Navigate back
-      context.pop();
+      navigator.pop(); // hoặc context.pop();
+    } catch (e) {
+      if (!context.mounted) return;
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text('Lưu model thất bại: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 

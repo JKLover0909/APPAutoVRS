@@ -6,6 +6,10 @@ import 'package:provider/provider.dart';
 import '../../services/autovrs_websocket_service.dart';
 import '../../services/video_frame_service.dart';
 import '../../services/ai_detection_service.dart';
+import '../../providers/vrs_provider.dart';
+import '../../main.dart';
+import '../../widgets/defect_list_widget.dart';
+import '../../services/local_database_service.dart';
 
 class ManualVRSScreen extends StatefulWidget {
   const ManualVRSScreen({super.key});
@@ -16,8 +20,11 @@ class ManualVRSScreen extends StatefulWidget {
 
 class _ManualVRSScreenState extends State<ManualVRSScreen> {
   double _magnification = 100;
-  int _currentBoard = 4;
-  final int _totalBoards = 25;
+  // index in _defects (0-based). If no defects, stays at 0.
+  int _currentDefectIndex = 0;
+  List<Map<String, dynamic>> _defects = [];
+  String? _currentBoardId;
+  final _db = LocalDatabaseService();
 
   // Streamlined state management for capture + AI detection
   late AIDetectionService _aiDetectionService;
@@ -45,6 +52,35 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
         listen: false,
       );
       _connectToBackend(webSocketService);
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Watch for board changes from provider and reload defects when board changes
+    final vrsProvider = Provider.of<VRSProvider>(context, listen: false);
+    final board = vrsProvider.currentBoard;
+    if (board != _currentBoardId) {
+      _currentBoardId = board;
+      _loadDefectsForBoard(board);
+    }
+  }
+
+  Future<void> _loadDefectsForBoard(String? boardIdStr) async {
+    final id = int.tryParse(boardIdStr ?? '');
+    if (id == null) {
+      setState(() {
+        _defects = [];
+        _currentDefectIndex = 0;
+      });
+      return;
+    }
+
+    final list = await _db.getDefectsByBoard(id);
+    setState(() {
+      _defects = list;
+      _currentDefectIndex = (_defects.isNotEmpty) ? 0 : 0;
     });
   }
 
@@ -107,7 +143,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
 
         // Also trigger capture for AutoVRS system
         final timestamp = DateTime.now().millisecondsSinceEpoch;
-        final filename = 'board_${_currentBoard}_$timestamp.jpg';
+        final filename = 'defect_${_currentDefectIndex + 1}_$timestamp.jpg';
         await webSocketService.captureImage(
           filename: filename,
           enableDetection: true,
@@ -144,7 +180,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
         );
       }
@@ -165,7 +201,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
         final screenWidth = MediaQuery.of(context).size.width;
         final isSmallScreen = screenWidth < 1200;
         final padding = isSmallScreen ? 16.0 : 24.0;
-
+        final vrsProvider = Provider.of<VRSProvider>(context);
         return Padding(
           padding: EdgeInsets.all(padding),
           child: Column(
@@ -221,26 +257,30 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                         Row(
                                           children: [
                                             IconButton(
-                                              onPressed: _currentBoard > 1
-                                                  ? _previousBoard
+                                              onPressed:
+                                                  _defects.isNotEmpty &&
+                                                      _currentDefectIndex > 0
+                                                  ? _previousDefect
                                                   : null,
                                               icon: const Icon(
                                                 FeatherIcons.arrowLeft,
                                               ),
-                                              tooltip: 'Bo trước',
+                                              tooltip: 'Lỗi trước',
                                             ),
                                             Text(
-                                              '$_currentBoard / $_totalBoards',
+                                              '${_defects.isNotEmpty ? _currentDefectIndex + 1 : 0} / ${_defects.length}',
                                             ),
                                             IconButton(
                                               onPressed:
-                                                  _currentBoard < _totalBoards
-                                                  ? _nextBoard
+                                                  _defects.isNotEmpty &&
+                                                      _currentDefectIndex <
+                                                          _defects.length - 1
+                                                  ? _nextDefect
                                                   : null,
                                               icon: const Icon(
                                                 FeatherIcons.arrowRight,
                                               ),
-                                              tooltip: 'Bo tiếp theo',
+                                              tooltip: 'Lỗi tiếp theo',
                                             ),
                                           ],
                                         ),
@@ -817,6 +857,13 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                     SizedBox(
                       width: isSmallScreen ? 280 : 320,
                       child: Card(
+                        shape: RoundedRectangleBorder(
+                          side: BorderSide(
+                            color: Colors.grey.shade300,
+                            width: 1,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(20),
                           child: Column(
@@ -829,15 +876,22 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
-
                               const Divider(height: 24),
-
                               // Info rows
-                              _buildInfoRow('Mã Lô:', 'Chưa có'),
+                              _buildInfoRow(
+                                'Mã Lô:',
+                                vrsProvider.currentLot != null &&
+                                        vrsProvider.currentLot!.isNotEmpty
+                                    ? vrsProvider.currentLot!
+                                    : 'Chưa có',
+                              ),
                               const SizedBox(height: 12),
                               _buildInfoRow(
                                 'Số thứ tự bo (Id_board):',
-                                '240715-008',
+                                vrsProvider.currentBoard != null &&
+                                        vrsProvider.currentBoard!.isNotEmpty
+                                    ? vrsProvider.currentBoard!
+                                    : 'Chưa có',
                               ),
                               const SizedBox(height: 12),
                               _buildInfoRow(
@@ -845,7 +899,15 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                 _getAIPredictionText(),
                               ),
 
-                              const SizedBox(height: 24),
+                              const SizedBox(height: 16),
+
+                              // Defect list for current board
+                              DefectListWidget(
+                                boardId: int.tryParse(vrsProvider.currentBoard),
+                                height: 220,
+                              ),
+
+                              const SizedBox(height: 12),
 
                               // Magnification Slider
                               Column(
@@ -1111,8 +1173,11 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                               SizedBox(
                                 width: double.infinity,
                                 child: ElevatedButton.icon(
-                                  onPressed: _currentBoard < _totalBoards
-                                      ? _nextBoard
+                                  onPressed:
+                                      _defects.isNotEmpty &&
+                                          _currentDefectIndex <
+                                              _defects.length - 1
+                                      ? _nextDefect
                                       : null,
                                   icon: const Icon(FeatherIcons.arrowRight),
                                   label: const Text('Bo tiếp theo'),
@@ -1160,33 +1225,35 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
     );
   }
 
-  void _previousBoard() {
-    if (_currentBoard > 1) {
-      setState(() => _currentBoard--);
+  void _previousDefect() {
+    if (_defects.isNotEmpty && _currentDefectIndex > 0) {
+      setState(() => _currentDefectIndex--);
     }
   }
 
-  void _nextBoard() {
-    if (_currentBoard < _totalBoards) {
-      setState(() => _currentBoard++);
+  void _nextDefect() {
+    if (_defects.isNotEmpty && _currentDefectIndex < _defects.length - 1) {
+      setState(() => _currentDefectIndex++);
     }
   }
 
   void _makeJudgment(bool isOK) {
     final result = isOK ? 'OK' : 'NG';
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    scaffoldMessengerKey.currentState?.showSnackBar(
       SnackBar(
-        content: Text('Đã phán định bo $_currentBoard: $result'),
+        content: Text(
+          'Đã phán định lỗi ${_defects.isNotEmpty ? _currentDefectIndex + 1 : 0}: $result',
+        ),
         backgroundColor: isOK ? Colors.green : Colors.red,
         duration: const Duration(seconds: 2),
       ),
     );
 
-    // Auto-navigate to next board after judgment
-    if (_currentBoard < _totalBoards) {
+    // Auto-navigate to next defect after judgment
+    if (_defects.isNotEmpty && _currentDefectIndex < _defects.length - 1) {
       Future.delayed(const Duration(milliseconds: 500), () {
-        _nextBoard();
+        _nextDefect();
       });
     }
   }

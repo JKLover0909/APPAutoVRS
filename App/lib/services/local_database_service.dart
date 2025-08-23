@@ -84,7 +84,7 @@ class LocalDatabaseService {
   Future<void> _createTables(Database db, int version) async {
     await db.execute('''
       CREATE TABLE tbModel (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id_model INTEGER PRIMARY KEY AUTOINCREMENT,
         line_size REAL,
         space_size REAL,
         url_gerber TEXT
@@ -152,11 +152,12 @@ class LocalDatabaseService {
   // ========== MODEL OPERATIONS ==========
   Future<int> insertModel(Map<String, dynamic> model) async {
     final db = await database;
-    return await db.insert(
+    final id_model = await db.insert(
       'tbModel',
       model,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    return id_model;
   }
 
   Future<List<Map<String, dynamic>>> getAllModels() async {
@@ -166,7 +167,11 @@ class LocalDatabaseService {
 
   Future<Map<String, dynamic>?> getModelById(int id) async {
     final db = await database;
-    final results = await db.query('tbModel', where: 'id = ?', whereArgs: [id]);
+    final results = await db.query(
+      'tbModel',
+      where: 'id_model = ?',
+      whereArgs: [id],
+    );
     return results.isNotEmpty ? results.first : null;
   }
 
@@ -424,5 +429,27 @@ class LocalDatabaseService {
       await _db!.close();
       _db = null;
     }
+  }
+
+  Future<Map<String, dynamic>?> getFirstLotByModelId(String idModel) async {
+    final db = await database;
+    final lots = await db.query(
+      'tbLot',
+      where: 'tbModelid = ?',
+      whereArgs: [idModel],
+      orderBy: 'id_lot ASC',
+    );
+    return lots.isNotEmpty ? lots.first : null;
+  }
+
+  Future<Map<String, dynamic>?> getFirstBoardByLotId(String idLot) async {
+    final db = await database;
+    final boards = await db.query(
+      'tbBoard',
+      where: 'tbLotid_lot = ?',
+      whereArgs: [idLot],
+      orderBy: 'id_board ASC',
+    );
+    return boards.isNotEmpty ? boards.first : null;
   }
 }

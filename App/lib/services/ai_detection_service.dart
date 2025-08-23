@@ -82,8 +82,8 @@ class AIDetectionService extends ChangeNotifier {
 
   Future<AIDetectionResult?> detectDefects({
     required Uint8List imageData,
-    double confidenceThreshold = 0.5,
-    double iouThreshold = 0.4,
+    double confidenceThreshold = 0.25,
+    double iouThreshold = 0.1,
   }) async {
     _isLoading = true;
     _lastError = null;

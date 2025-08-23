@@ -17,6 +17,9 @@ import 'services/ai_detection_service.dart';
 import 'services/local_database_service.dart';
 import 'services/database_seeder.dart';
 
+final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -53,8 +56,8 @@ void main() async {
     debugPrint('Database initialized successfully');
 
     // Seed database with sample data
-    final seeder = DatabaseSeeder();
-    await seeder.seedDatabase();
+    // final seeder = DatabaseSeeder();
+    // await seeder.seedDatabase();
   } catch (e) {
     debugPrint('Warning: Database initialization failed: $e');
     debugPrint('App will continue without local database');
@@ -82,6 +85,7 @@ class AutoVRSApp extends StatelessWidget {
         builder: (context, navigationProvider, child) {
           return MaterialApp.router(
             title: 'AutoVRS - Hệ thống kiểm tra tự động',
+            scaffoldMessengerKey: scaffoldMessengerKey,
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,

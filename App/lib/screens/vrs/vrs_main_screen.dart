@@ -4,7 +4,31 @@ import 'package:flutter_feather_icons/flutter_feather_icons.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/vrs_provider.dart';
 import '../../services/autovrs_websocket_service.dart';
+import 'manual_vrs_screen.dart';
+import '../../widgets/defect_list_widget.dart';
+import '../../services/local_database_service.dart';
+
+// Map technical defect names to display names (same logic as ManualVRSScreen)
+String _getDefectDisplayName(String technicalName) {
+  switch (technicalName.toLowerCase()) {
+    case 'short_circuit':
+      return 'Chập mạch';
+    case 'missing_component':
+      return 'Thiếu linh kiện';
+    case 'damaged_track':
+      return 'Đường mạch hỏng';
+    case 'solder_bridge':
+      return 'Cầu hàn';
+    case 'crack':
+      return 'Vết nứt';
+    case 'person':
+      return 'Người';
+    default:
+      return technicalName;
+  }
+}
 
 class VRSMainScreen extends StatelessWidget {
   const VRSMainScreen({super.key});
@@ -16,6 +40,38 @@ class VRSMainScreen extends StatelessWidget {
         final screenWidth = MediaQuery.of(context).size.width;
         final isSmallScreen = screenWidth < 1200;
         final padding = isSmallScreen ? 16.0 : 24.0;
+
+        // read providers early in the builder so UI below can use dynamic values
+        final vrsProvider = Provider.of<VRSProvider>(context);
+        final webSocketService = Provider.of<AutoVRSWebSocketService>(context);
+
+        // compute display values
+        final lotText =
+            (vrsProvider.currentLot.isNotEmpty &&
+                vrsProvider.currentLot != 'Chưa có')
+            ? vrsProvider.currentLot
+            : 'Chưa có';
+        final boardText =
+            (vrsProvider.currentBoard.isNotEmpty &&
+                vrsProvider.currentBoard != 'Chưa có')
+            ? vrsProvider.currentBoard
+            : 'Chưa có';
+
+        String aiText = 'Không phát hiện lỗi';
+        final analysis = webSocketService.lastAnalysis;
+        if (analysis != null) {
+          if (analysis['defects_by_type'] != null &&
+              analysis['defects_by_type'] is Map) {
+            final Map defects = analysis['defects_by_type'] as Map;
+            if (defects.keys.isNotEmpty) {
+              aiText = defects.keys
+                  .map((k) => _getDefectDisplayName(k.toString()))
+                  .join(', ');
+            }
+          } else if ((analysis['total_defects'] ?? 0) > 0) {
+            aiText = 'Có lỗi';
+          }
+        }
 
         return Padding(
           padding: EdgeInsets.all(padding),
@@ -314,6 +370,10 @@ class VRSMainScreen extends StatelessWidget {
               SizedBox(
                 width: isSmallScreen ? 280 : 320,
                 child: Card(
+                  shape: RoundedRectangleBorder(
+                    side: BorderSide(color: Colors.grey.shade300, width: 1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(20),
                     child: Column(
@@ -329,10 +389,28 @@ class VRSMainScreen extends StatelessWidget {
 
                         const Divider(height: 24),
 
-                        // Info rows
-                        _buildInfoRow('Mã Lô (id_lot):', 'Chưa có'),
+                        // Info rows (dynamic from providers)
+                        _buildInfoRow('Mã Lô (id_lot):', lotText),
                         const SizedBox(height: 12),
-                        _buildInfoRow('Loại lỗi:', 'Hở mạch'),
+                        _buildInfoRow('Số thứ tự bo:', boardText),
+                        const SizedBox(height: 12),
+                        _buildInfoRow('Loại lỗi AI dự đoán:', aiText),
+                        const SizedBox(height: 12),
+                        // Total defects for current board
+                        FutureBuilder<List<Map<String, dynamic>>>(
+                          future: (int.tryParse(boardText) != null)
+                              ? LocalDatabaseService().getDefectsByBoard(
+                                  int.parse(boardText),
+                                )
+                              : Future.value([]),
+                          builder: (context, snap) {
+                            final total = snap.hasData ? snap.data!.length : 0;
+                            return _buildInfoRow(
+                              'Số lỗi trên bo:',
+                              total.toString(),
+                            );
+                          },
+                        ),
 
                         const SizedBox(height: 24),
 
@@ -363,7 +441,15 @@ class VRSMainScreen extends StatelessWidget {
                           ),
                         ),
 
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 16),
+
+                        // Defect list for currently selected board
+                        DefectListWidget(
+                          boardId: int.tryParse(boardText),
+                          height: 200,
+                        ),
+
+                        const SizedBox(height: 16),
 
                         // Statistics Button
                         Consumer<AuthProvider>(
@@ -388,20 +474,26 @@ class VRSMainScreen extends StatelessWidget {
 
                         const SizedBox(height: 16),
 
-                        // Manual review button
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: () => context.push('/vrs/manual'),
-                            icon: const Icon(FeatherIcons.edit3),
-                            label: const Text('Phán định thủ công'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                          ),
-                        ),
+                        // // Manual review button
+                        // SizedBox(
+                        //   width: double.infinity,
+                        //   child: ElevatedButton.icon(
+                        //     onPressed: () {
+                        //       Navigator.of(context).push(
+                        //         MaterialPageRoute(
+                        //           builder: (context) => ManualVRSScreen(),
+                        //         ),
+                        //       );
+                        //     },
+                        //     icon: const Icon(FeatherIcons.edit3),
+                        //     label: const Text('Phán định thủ công'),
+                        //     style: ElevatedButton.styleFrom(
+                        //       backgroundColor: Colors.orange,
+                        //       foregroundColor: Colors.white,
+                        //       padding: const EdgeInsets.symmetric(vertical: 12),
+                        //     ),
+                        //   ),
+                        // ),
                       ],
                     ),
                   ),
