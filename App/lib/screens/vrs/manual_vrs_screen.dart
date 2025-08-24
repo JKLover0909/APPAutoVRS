@@ -905,6 +905,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                               DefectListWidget(
                                 boardId: int.tryParse(vrsProvider.currentBoard),
                                 height: 220,
+                                reloadToken: 0,
                               ),
 
                               const SizedBox(height: 12),

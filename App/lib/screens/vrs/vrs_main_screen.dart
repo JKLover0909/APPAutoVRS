@@ -46,6 +46,13 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
   bool _running = false;
   List<Map<String, dynamic>> _defects = [];
   int _currentIndex = 0;
+  // Token to force defect list widget to reload its cached future
+  int _defectListReloadToken = 0;
+  // Track the last persisted AI verdict so the result panel shows the most
+  // recent decision even if _currentIndex advances to the next defect.
+  int? _lastPersistedDefectId;
+  String? _lastPersistedVerdict;
+  String? _lastPersistedType;
 
   @override
   void initState() {
@@ -63,6 +70,17 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
     final type = msg['type'] ?? '';
     if (type.toString().toLowerCase() == 'process') {
       final defectId = msg['defect_id'];
+      debugPrint(
+        'VRSMainScreen: PROCESS received from server with defect_id=$defectId',
+      );
+      // Determine current board id from provider to reload defects after persisting
+      final _vrsProviderForReload = Provider.of<VRSProvider>(
+        context,
+        listen: false,
+      );
+      final _boardIdFromProvider = int.tryParse(
+        _vrsProviderForReload.currentBoard,
+      );
       // Run AI on current displayed frame
       final aiService = AIDetectionService();
       // Capture image bytes from AutoVRS service
@@ -93,16 +111,203 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
                 )
                 .toList(),
           });
+
+          // Persist AI judgement into the local database for the defect
+          try {
+            final hasDetections = result.detections.isNotEmpty;
+            final verdict = hasDetections ? 'NG' : 'OK';
+            // Choose a representative type string: first detection class or empty
+            final detectedType = hasDetections
+                ? result.detections.first.className
+                : 'none';
+
+            // If defectId is provided and numeric, attempt to update DB
+            final id = (defectId is int)
+                ? defectId
+                : int.tryParse(defectId?.toString() ?? '');
+            if (id != null) {
+              debugPrint(
+                'VRSMainScreen: persisting AI result for defect id=$id (detectedType=$detectedType verdict=$verdict)',
+              );
+              await LocalDatabaseService().updateDefect(id, {
+                'type': detectedType,
+                'judgement': verdict,
+                'time': DateTime.now().toIso8601String(),
+              });
+              // bump the reload token so UI lists refresh
+              setState(() {
+                _defectListReloadToken++;
+              });
+              // record last persisted verdict/type
+              _lastPersistedDefectId = id;
+              _lastPersistedVerdict = verdict;
+              _lastPersistedType = detectedType;
+
+              // If we know the board id, reload defects and advance to next defect
+              if (_boardIdFromProvider != null) {
+                try {
+                  final reloaded = await LocalDatabaseService()
+                      .getDefectsByBoard(_boardIdFromProvider);
+                  final foundIndex = reloaded.indexWhere((d) {
+                    final did = d['id_defect'] ?? d['id'] ?? d['defect_id'];
+                    if (did == null) return false;
+                    final parsed = (did is int)
+                        ? did
+                        : int.tryParse(did.toString());
+                    return parsed == id;
+                  });
+
+                  debugPrint(
+                    'VRSMainScreen: reloaded defects=${reloaded.length} foundIndex=$foundIndex',
+                  );
+
+                  int nextIndex = 0;
+                  if (foundIndex != -1 && foundIndex < reloaded.length - 1) {
+                    nextIndex = foundIndex + 1;
+                  } else if (foundIndex == -1) {
+                    // Persisted defect not found in reloaded list. Resume from
+                    // the previous index (clamped) so we don't loop back to start
+                    // and repeat defects.
+                    final clamped = (_currentIndex >= reloaded.length)
+                        ? reloaded.length - 1
+                        : _currentIndex;
+                    nextIndex = clamped < 0 ? 0 : clamped;
+                  } else {
+                    // processed last defect -> stop workflow
+                    nextIndex = reloaded.length;
+                  }
+
+                  setState(() {
+                    _defects = reloaded;
+                    _currentIndex = nextIndex;
+                    debugPrint(
+                      'VRSMainScreen: advanced to index=$_currentIndex after persist',
+                    );
+                    if (_currentIndex >= _defects.length) {
+                      _running = false;
+                      debugPrint(
+                        'VRSMainScreen: no more defects - stopping workflow',
+                      );
+                    }
+                  });
+                  // After successful persist and index advance, send next coords if still running
+                  if (mounted && _running && _currentIndex < _defects.length) {
+                    _sendCurrentCoordsIfRunning();
+                  }
+                } catch (e) {
+                  debugPrint('Error reloading defects after persist: $e');
+                }
+              } else {
+                // Fallback: update in-memory list and increment index
+                final idx = _defects.indexWhere((d) {
+                  final did = d['id_defect'] ?? d['id'] ?? d['defect_id'];
+                  if (did == null) return false;
+                  final parsed = (did is int)
+                      ? did
+                      : int.tryParse(did.toString());
+                  return parsed == id;
+                });
+                if (idx != -1) {
+                  setState(() {
+                    _defects[idx]['type'] = detectedType;
+                    _defects[idx]['judgement'] = verdict;
+                    if (idx < _defects.length - 1) {
+                      _currentIndex = idx + 1;
+                    } else {
+                      _running = false;
+                    }
+                    _defectListReloadToken++;
+                  });
+                  // record last persisted verdict/type for in-memory update
+                  _lastPersistedDefectId =
+                      (_defects[idx]['id_defect'] ??
+                              _defects[idx]['id'] ??
+                              _defects[idx]['defect_id'])
+                          is int
+                      ? (_defects[idx]['id_defect'] ??
+                                _defects[idx]['id'] ??
+                                _defects[idx]['defect_id'])
+                            as int
+                      : int.tryParse(
+                          (_defects[idx]['id_defect'] ??
+                                  _defects[idx]['id'] ??
+                                  _defects[idx]['defect_id'])
+                              .toString(),
+                        );
+                  _lastPersistedVerdict = verdict;
+                  _lastPersistedType = detectedType;
+                  // send next coords if still running
+                  if (mounted && _running && _currentIndex < _defects.length) {
+                    _sendCurrentCoordsIfRunning();
+                  }
+                }
+              }
+            } else {
+              // defect_id from server was not numeric; fallback to using current in-memory defect at _currentIndex
+              debugPrint(
+                'VRSMainScreen: defect_id from server not numeric, falling back to in-memory index=$_currentIndex',
+              );
+              if (_defects.isNotEmpty &&
+                  _currentIndex >= 0 &&
+                  _currentIndex < _defects.length) {
+                final fallbackIdRaw =
+                    _defects[_currentIndex]['id_defect'] ??
+                    _defects[_currentIndex]['id'] ??
+                    _defects[_currentIndex]['defect_id'];
+                final fallbackId = (fallbackIdRaw is int)
+                    ? fallbackIdRaw
+                    : int.tryParse(fallbackIdRaw?.toString() ?? '');
+                if (fallbackId != null) {
+                  debugPrint(
+                    'VRSMainScreen: persisting AI result for in-memory defect id=$fallbackId',
+                  );
+                  try {
+                    await LocalDatabaseService().updateDefect(fallbackId, {
+                      'type': detectedType,
+                      'judgement': verdict,
+                      'time': DateTime.now().toIso8601String(),
+                    });
+                    setState(() {
+                      _defects[_currentIndex]['type'] = detectedType;
+                      _defects[_currentIndex]['judgement'] = verdict;
+                      if (_currentIndex < _defects.length - 1)
+                        _currentIndex++;
+                      else
+                        _running = false;
+                      _defectListReloadToken++;
+                    });
+                    // record last persisted verdict/type for fallback persist
+                    _lastPersistedDefectId = fallbackId;
+                    _lastPersistedVerdict = verdict;
+                    _lastPersistedType = detectedType;
+                    // send next coords if still running
+                    if (mounted &&
+                        _running &&
+                        _currentIndex < _defects.length) {
+                      _sendCurrentCoordsIfRunning();
+                    }
+                  } catch (e) {
+                    debugPrint('VRSMainScreen: fallback persist failed: $e');
+                  }
+                } else {
+                  debugPrint(
+                    'VRSMainScreen: fallbackId is null, cannot persist',
+                  );
+                }
+              } else {
+                debugPrint(
+                  'VRSMainScreen: no in-memory defect available to fallback',
+                );
+              }
+            }
+          } catch (e) {
+            debugPrint('Failed to persist AI result: $e');
+          }
         }
       }
 
-      // proceed to next defect automatically
-      if (mounted) {
-        setState(() {
-          if (_currentIndex < _defects.length - 1) _currentIndex++;
-        });
-        _sendCurrentCoordsIfRunning();
-      }
+      // no unconditional advance here; advances and sending are handled
+      // immediately after successful persistence above to avoid double-advancing
     }
   }
 
@@ -138,21 +343,30 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
         return;
       }
 
-      final first = defectsForBoard.first;
-      final boardId = first['tbBoardid_board'] ?? first['board_id'];
-      final defectId = first['id'] ?? first['id_defect'] ?? first['defect_id'];
+      // Use the current index in the workflow (fall back to 0 if out of bounds)
+      final int idx =
+          (_currentIndex >= 0 && _currentIndex < defectsForBoard.length)
+          ? _currentIndex
+          : 0;
+      final current = defectsForBoard[idx];
+      debugPrint(
+        'VRSMainScreen: preparing to send coords for defect index=$idx (of ${defectsForBoard.length})',
+      );
+      final boardId = current['tbBoardid_board'] ?? current['board_id'];
+      final defectId =
+          current['id'] ?? current['id_defect'] ?? current['defect_id'];
 
       num x = 0;
       num y = 0;
 
-      final coords = first['coordinates'];
+      final coords = current['coordinates'];
       if (coords != null) {
         if (coords is String) {
           debugPrint('VRSMainScreen: raw coords string found: $coords');
           // Send raw string coordinates as requested (e.g. "4.0,4.0")
           if (boardId != null && defectId != null) {
             debugPrint(
-              'VRSMainScreen: sending raw coords string for defect $defectId',
+              'VRSMainScreen: sending raw coords string for defect $defectId (index=$idx)',
             );
             _coordClient.sendCoordsString(
               boardId: boardId,
@@ -162,7 +376,7 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
             return;
           } else {
             debugPrint(
-              'VRSMainScreen: cannot send raw coords string - missing ids',
+              'VRSMainScreen: cannot send raw coords string - missing ids (index=$idx)',
             );
           }
         }
@@ -212,7 +426,7 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
 
       if (boardId != null && defectId != null) {
         debugPrint(
-          'VRSMainScreen: sending coords -> board=$boardId defect=$defectId x=$x y=$y',
+          'VRSMainScreen: sending coords -> board=$boardId defect=$defectId index=$idx x=$x y=$y',
         );
         _coordClient.sendCoords(
           boardId: boardId,
@@ -643,22 +857,132 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
 
                         const SizedBox(height: 12),
 
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            'NG',
-                            style: TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.red.shade600,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
+                        // Dynamic AI Result Panel - shows OK (green) or NG (red)
+                        Builder(
+                          builder: (context) {
+                            String verdictShort = 'OK';
+                            Color bgColor = Colors.green.shade50;
+                            Color txtColor = Colors.green.shade600;
+                            String detailText = aiText;
+
+                            // Prefer the last persisted verdict/type when available.
+                            // This ensures the result card shows the most recent
+                            // persisted AI decision even if _currentIndex has moved on.
+                            if (_lastPersistedVerdict != null) {
+                              verdictShort = _lastPersistedVerdict!
+                                  .toUpperCase();
+                              if (verdictShort == 'OK') {
+                                bgColor = Colors.green.shade50;
+                                txtColor = Colors.green.shade600;
+                                detailText = 'Không phát hiện lỗi';
+                              } else {
+                                bgColor = Colors.red.shade50;
+                                txtColor = Colors.red.shade600;
+                                if (_lastPersistedType != null &&
+                                    _lastPersistedType!.isNotEmpty) {
+                                  detailText = _getDefectDisplayName(
+                                    _lastPersistedType!,
+                                  );
+                                } else {
+                                  detailText = aiText;
+                                }
+                              }
+                            } else if (_defects.isNotEmpty &&
+                                _currentIndex < _defects.length) {
+                              final cur = _defects[_currentIndex];
+                              final j = cur['judgement']
+                                  ?.toString()
+                                  .toUpperCase();
+                              if (j != null && j.isNotEmpty) {
+                                verdictShort = j;
+                                if (verdictShort == 'OK') {
+                                  bgColor = Colors.green.shade50;
+                                  txtColor = Colors.green.shade600;
+                                  detailText = 'Không phát hiện lỗi';
+                                } else {
+                                  bgColor = Colors.red.shade50;
+                                  txtColor = Colors.red.shade600;
+                                  // show detected type if available
+                                  detailText =
+                                      (cur['type'] != null &&
+                                          cur['type'].toString().isNotEmpty)
+                                      ? _getDefectDisplayName(
+                                          cur['type'].toString(),
+                                        )
+                                      : aiText;
+                                }
+                              } else {
+                                // no persisted judgement yet - fallback to lastAnalysis
+                                if (analysis != null) {
+                                  final hasDefects =
+                                      (analysis['total_defects'] ?? 0) > 0 ||
+                                      (analysis['defects_by_type'] is Map &&
+                                          (analysis['defects_by_type'] as Map)
+                                              .keys
+                                              .isNotEmpty);
+                                  if (hasDefects) {
+                                    verdictShort = 'NG';
+                                    bgColor = Colors.red.shade50;
+                                    txtColor = Colors.red.shade600;
+                                  } else {
+                                    verdictShort = 'OK';
+                                    bgColor = Colors.green.shade50;
+                                    txtColor = Colors.green.shade600;
+                                  }
+                                }
+                              }
+                            } else {
+                              // no defect in memory - use analysis
+                              if (analysis != null) {
+                                final hasDefects =
+                                    (analysis['total_defects'] ?? 0) > 0 ||
+                                    (analysis['defects_by_type'] is Map &&
+                                        (analysis['defects_by_type'] as Map)
+                                            .keys
+                                            .isNotEmpty);
+                                if (hasDefects) {
+                                  verdictShort = 'NG';
+                                  bgColor = Colors.red.shade50;
+                                  txtColor = Colors.red.shade600;
+                                } else {
+                                  verdictShort = 'OK';
+                                  bgColor = Colors.green.shade50;
+                                  txtColor = Colors.green.shade600;
+                                }
+                              }
+                            }
+
+                            return Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color: bgColor,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Column(
+                                children: [
+                                  Text(
+                                    verdictShort,
+                                    style: TextStyle(
+                                      fontSize: 32,
+                                      fontWeight: FontWeight.bold,
+                                      color: txtColor,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    detailText,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: txtColor.withOpacity(0.9),
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
                         ),
 
                         const SizedBox(height: 16),
@@ -667,6 +991,7 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
                         DefectListWidget(
                           boardId: int.tryParse(boardText),
                           height: 200,
+                          reloadToken: _defectListReloadToken,
                         ),
 
                         const SizedBox(height: 16),

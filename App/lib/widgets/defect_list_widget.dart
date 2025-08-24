@@ -8,8 +8,16 @@ class DefectListWidget extends StatefulWidget {
   final int? boardId;
   final double height;
 
-  const DefectListWidget({Key? key, required this.boardId, this.height = 220})
-    : super(key: key);
+  /// A simple token that parents can bump to force the widget to reload
+  /// its cached Future from the database. Increment this to refresh.
+  final int reloadToken;
+
+  const DefectListWidget({
+    Key? key,
+    required this.boardId,
+    this.height = 220,
+    this.reloadToken = 0,
+  }) : super(key: key);
 
   @override
   State<DefectListWidget> createState() => _DefectListWidgetState();
@@ -28,7 +36,9 @@ class _DefectListWidgetState extends State<DefectListWidget> {
   @override
   void didUpdateWidget(covariant DefectListWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.boardId != widget.boardId) {
+    // Recreate the future when board changes or when parent bumps the reloadToken
+    if (oldWidget.boardId != widget.boardId ||
+        oldWidget.reloadToken != widget.reloadToken) {
       _prepareFuture();
     }
   }

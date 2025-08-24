@@ -263,7 +263,8 @@ class LocalDatabaseService {
       'tbDefect',
       where: 'tbBoardid_board = ?',
       whereArgs: [idBoard],
-      orderBy: 'time DESC',
+      // Order by primary key (insertion order) for deterministic processing
+      orderBy: 'id_defect ASC',
     );
   }
 
@@ -274,6 +275,18 @@ class LocalDatabaseService {
       where: 'type = ?',
       whereArgs: [defectType],
       orderBy: 'time DESC',
+    );
+  }
+
+  /// Update fields of a defect row by its id_defect.
+  /// Returns number of rows affected.
+  Future<int> updateDefect(int idDefect, Map<String, dynamic> fields) async {
+    final db = await database;
+    return await db.update(
+      'tbDefect',
+      fields,
+      where: 'id_defect = ?',
+      whereArgs: [idDefect],
     );
   }
 
