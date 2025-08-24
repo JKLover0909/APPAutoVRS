@@ -323,7 +323,18 @@ class LocalDatabaseService {
 
     final Map<String, int> stats = {};
     for (var row in results) {
-      stats[row['type'] as String] = row['count'] as int;
+      // Defensive handling: row['type'] may be null in some DB rows.
+      final key = row['type'] != null ? row['type'].toString() : 'Unknown';
+
+      // `count` should be an int, but be defensive in case it's returned as String.
+      int count = 0;
+      if (row['count'] is int) {
+        count = row['count'] as int;
+      } else if (row['count'] != null) {
+        count = int.tryParse(row['count'].toString()) ?? 0;
+      }
+
+      stats[key] = count;
     }
     return stats;
   }

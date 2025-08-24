@@ -1,14 +1,18 @@
 import 'dart:typed_data';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_feather_icons/flutter_feather_icons.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/vrs_provider.dart';
-import '../../services/autovrs_websocket_service.dart';
+// import '../../services/autovrs_websocket_service.dart';
 import 'manual_vrs_screen.dart';
 import '../../widgets/defect_list_widget.dart';
 import '../../services/local_database_service.dart';
+import '../../services/coord_ws_client.dart';
+import '../../services/ai_detection_service.dart';
+import '../../services/autovrs_websocket_service.dart';
 
 // Map technical defect names to display names (same logic as ManualVRSScreen)
 String _getDefectDisplayName(String technicalName) {
@@ -30,8 +34,224 @@ String _getDefectDisplayName(String technicalName) {
   }
 }
 
-class VRSMainScreen extends StatelessWidget {
+class VRSMainScreen extends StatefulWidget {
   const VRSMainScreen({super.key});
+
+  @override
+  State<VRSMainScreen> createState() => _VRSMainScreenState();
+}
+
+class _VRSMainScreenState extends State<VRSMainScreen> {
+  final CoordWsClient _coordClient = CoordWsClient();
+  bool _running = false;
+  List<Map<String, dynamic>> _defects = [];
+  int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _coordClient.onMessage = _handleWsMessage;
+  }
+
+  @override
+  void dispose() {
+    _coordClient.disconnect();
+    super.dispose();
+  }
+
+  void _handleWsMessage(Map<String, dynamic> msg) async {
+    final type = msg['type'] ?? '';
+    if (type.toString().toLowerCase() == 'process') {
+      final defectId = msg['defect_id'];
+      // Run AI on current displayed frame
+      final aiService = AIDetectionService();
+      // Capture image bytes from AutoVRS service
+      final autoService = Provider.of<AutoVRSWebSocketService>(
+        context,
+        listen: false,
+      );
+      final imageBytes = autoService.displayImage ?? autoService.currentFrame;
+
+      if (imageBytes != null) {
+        final result = await aiService.detectDefects(imageData: imageBytes);
+        if (result != null) {
+          // send result back to operator server
+          _coordClient.sendResult({
+            'defect_id': defectId,
+            'success': result.success,
+            'message': result.message,
+            'detections': result.detections
+                .map(
+                  (d) => {
+                    'bbox': d.bbox,
+                    'confidence': d.confidence,
+                    'class_id': d.classId,
+                    'class_name': d.className,
+                    'class_name_vi': d.classNameVi,
+                    'coordinates': d.coordinates,
+                  },
+                )
+                .toList(),
+          });
+        }
+      }
+
+      // proceed to next defect automatically
+      if (mounted) {
+        setState(() {
+          if (_currentIndex < _defects.length - 1) _currentIndex++;
+        });
+        _sendCurrentCoordsIfRunning();
+      }
+    }
+  }
+
+  Future<void> _sendCurrentCoordsIfRunning() async {
+    if (!_running) {
+      debugPrint(
+        'VRSMainScreen: _sendCurrentCoordsIfRunning called but workflow not running',
+      );
+      return;
+    }
+    debugPrint(
+      'VRSMainScreen: _sendCurrentCoordsIfRunning start - defectsLoaded=${_defects.length}',
+    );
+    // Fetch defects for the currently selected board and send the FIRST defect's coordinates
+    try {
+      // If we already loaded defects for this run, prefer them; otherwise fetch
+      List<Map<String, dynamic>> defectsForBoard = _defects;
+      if (defectsForBoard.isEmpty) {
+        // Try to determine board id from UI/provider
+        // In most cases vrsProvider.currentBoard holds the board id string
+        final vrsProvider = Provider.of<VRSProvider>(context, listen: false);
+        final boardStr = vrsProvider.currentBoard;
+        final parsedBoardId = int.tryParse(boardStr);
+        if (parsedBoardId != null) {
+          defectsForBoard = await LocalDatabaseService().getDefectsByBoard(
+            parsedBoardId,
+          );
+        }
+      }
+
+      if (defectsForBoard.isEmpty) {
+        debugPrint('VRSMainScreen: no defects found for board after DB fetch');
+        return;
+      }
+
+      final first = defectsForBoard.first;
+      final boardId = first['tbBoardid_board'] ?? first['board_id'];
+      final defectId = first['id'] ?? first['id_defect'] ?? first['defect_id'];
+
+      num x = 0;
+      num y = 0;
+
+      final coords = first['coordinates'];
+      if (coords != null) {
+        if (coords is String) {
+          debugPrint('VRSMainScreen: raw coords string found: $coords');
+          // Send raw string coordinates as requested (e.g. "4.0,4.0")
+          if (boardId != null && defectId != null) {
+            debugPrint(
+              'VRSMainScreen: sending raw coords string for defect $defectId',
+            );
+            _coordClient.sendCoordsString(
+              boardId: boardId,
+              defectId: defectId,
+              coords: coords,
+            );
+            return;
+          } else {
+            debugPrint(
+              'VRSMainScreen: cannot send raw coords string - missing ids',
+            );
+          }
+        }
+        // Otherwise fallthrough to numeric parsing
+        if (coords is String) {
+          // Try JSON first
+          try {
+            final decoded = jsonDecode(coords) as Map<String, dynamic>;
+            x = (decoded['x'] ?? 0) is num
+                ? decoded['x'] as num
+                : double.tryParse('${decoded['x']}') ?? 0;
+            y = (decoded['y'] ?? 0) is num
+                ? decoded['y'] as num
+                : double.tryParse('${decoded['y']}') ?? 0;
+          } catch (_) {
+            // Fallback simple parser for 'x:100,y:200' or '100,200'
+            try {
+              if (coords.contains(':')) {
+                final parts = coords.split(',');
+                for (var p in parts) {
+                  final kv = p.split(':');
+                  if (kv.length == 2) {
+                    final key = kv[0].trim();
+                    final val = double.tryParse(kv[1].trim()) ?? 0;
+                    if (key == 'x') x = val;
+                    if (key == 'y') y = val;
+                  }
+                }
+              } else {
+                final parts = coords.split(',');
+                if (parts.length >= 2) {
+                  x = double.tryParse(parts[0].trim()) ?? 0;
+                  y = double.tryParse(parts[1].trim()) ?? 0;
+                }
+              }
+            } catch (_) {}
+          }
+        } else if (coords is Map) {
+          x = (coords['x'] ?? 0) is num
+              ? coords['x'] as num
+              : double.tryParse('${coords['x']}') ?? 0;
+          y = (coords['y'] ?? 0) is num
+              ? coords['y'] as num
+              : double.tryParse('${coords['y']}') ?? 0;
+        }
+      }
+
+      if (boardId != null && defectId != null) {
+        debugPrint(
+          'VRSMainScreen: sending coords -> board=$boardId defect=$defectId x=$x y=$y',
+        );
+        _coordClient.sendCoords(
+          boardId: boardId,
+          defectId: defectId,
+          x: x,
+          y: y,
+        );
+      }
+    } catch (e) {
+      debugPrint('Error sending first defect coords: $e');
+    }
+  }
+
+  Future<void> _startWorkflow(int boardId) async {
+    // load defects
+    final list = await LocalDatabaseService().getDefectsByBoard(boardId);
+    setState(() {
+      _defects = list;
+      _currentIndex = 0;
+      _running = true;
+    });
+
+    try {
+      await _coordClient.connect();
+      debugPrint('VRSMainScreen: coord ws connected');
+    } catch (e) {
+      debugPrint('VRSMainScreen: coord ws connection failed: $e');
+    }
+    // send first coords
+    await _sendCurrentCoordsIfRunning();
+  }
+
+  Future<void> _stopWorkflow() async {
+    setState(() {
+      _running = false;
+    });
+    await _coordClient.disconnect();
+    debugPrint('VRSMainScreen: stopped workflow and disconnected coord ws');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -447,6 +667,38 @@ class VRSMainScreen extends StatelessWidget {
                         DefectListWidget(
                           boardId: int.tryParse(boardText),
                           height: 200,
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // Start / Stop operator-driven workflow
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: (boardText != 'Chưa có' && !_running)
+                                    ? () {
+                                        final bId = int.tryParse(boardText);
+                                        if (bId != null) _startWorkflow(bId);
+                                      }
+                                    : null,
+                                child: const Text('Bắt đầu'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: _running ? _stopWorkflow : null,
+                                child: const Text('Dừng'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
 
                         const SizedBox(height: 16),

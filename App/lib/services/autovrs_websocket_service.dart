@@ -64,23 +64,23 @@ class AutoVRSWebSocketService extends ChangeNotifier {
 
   // Phương thức để lấy ảnh hiện tại đang hiển thị
   Uint8List? get displayImage {
-    debugPrint(
-      '🖼️ displayImage called - isViewingCaptured: $_isViewingCapturedImage',
-    );
-    debugPrint('🖼️ _capturedImage available: ${_capturedImage != null}');
-    debugPrint('🖼️ _currentFrame available: ${_currentFrame != null}');
+    // debugPrint(
+    //   '🖼️ displayImage called - isViewingCaptured: $_isViewingCapturedImage',
+    // );
+    // debugPrint('🖼️ _capturedImage available: ${_capturedImage != null}');
+    // debugPrint('🖼️ _currentFrame available: ${_currentFrame != null}');
 
-    if (_isViewingCapturedImage && _capturedImage != null) {
-      debugPrint(
-        '🖼️ Returning captured image (${_capturedImage!.length} bytes)',
-      );
-      return _capturedImage;
-    } else {
-      debugPrint(
-        '🖼️ Returning current frame (${_currentFrame?.length ?? 0} bytes)',
-      );
-      return _currentFrame;
-    }
+    // if (_isViewingCapturedImage && _capturedImage != null) {
+    //   debugPrint(
+    //     '🖼️ Returning captured image (${_capturedImage!.length} bytes)',
+    //   );
+    //   return _capturedImage;
+    // } else {
+    //   debugPrint(
+    //     '🖼️ Returning current frame (${_currentFrame?.length ?? 0} bytes)',
+    //   );
+    //   return _currentFrame;
+    // }
   }
 
   /// Kết nối đến AutoVRS WebSocket server
@@ -139,7 +139,7 @@ class AutoVRSWebSocketService extends ChangeNotifier {
     try {
       if (message is Uint8List) {
         // Nếu là dữ liệu nhị phân (ảnh JPEG)
-        debugPrint('🖼️ Received JPEG frame (${message.length} bytes)');
+        // debugPrint('🖼️ Received JPEG frame (${message.length} bytes)');
         // TODO: Xử lý hiển thị ảnh lên UI hoặc lưu frame
         // Ví dụ: _currentFrame = message;
         _currentFrame = message;
@@ -149,7 +149,8 @@ class AutoVRSWebSocketService extends ChangeNotifier {
         optimizeMemory();
         if (_frameCount % 5 == 0) notifyListeners();
         if (_frameCount % 30 == 0)
-          debugPrint('📹 Frame processed: $_frameCount');
+          // debugPrint('📹 Frame processed: $_frameCount')
+          ;
       } else if (message is String) {
         // Nếu là text (JSON)
         try {
@@ -487,7 +488,7 @@ class AutoVRSWebSocketService extends ChangeNotifier {
     _currentFrameNotifier.value = null;
 
     // Force garbage collection hint
-    debugPrint('🗑️ Cleared old frame data for memory optimization');
+    // debugPrint('🗑️ Cleared old frame data for memory optimization');
   }
 
   /// Optimize memory usage by cleaning up resources

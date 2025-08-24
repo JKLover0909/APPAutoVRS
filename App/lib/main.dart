@@ -78,7 +78,14 @@ class AutoVRSApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => VRSProvider()),
         ChangeNotifierProvider(create: (_) => StatisticsProvider()),
         ChangeNotifierProvider(create: (_) => FlutterCameraService()),
-        ChangeNotifierProvider(create: (_) => AutoVRSWebSocketService()),
+        ChangeNotifierProvider(
+          create: (_) {
+            final svc = AutoVRSWebSocketService();
+            // Attempt to connect in background when the app starts
+            svc.connect();
+            return svc;
+          },
+        ),
         ChangeNotifierProvider(create: (_) => AIDetectionService()),
       ],
       child: Consumer<NavigationProvider>(
