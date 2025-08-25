@@ -1,27 +1,34 @@
 # -*- coding: utf-8 -*-
-# AI Detection API cho AutoVRS
+# AutoVRS AI Detection API
 # Backend Python với FastAPI và Ultralytics YOLO
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import cv2
-import numpy as np
+from fastapi import FastAPI, HTTPException # type: ignore
+from fastapi.middleware.cors import CORSMiddleware # type: ignore
+from pydantic import BaseModel # type: ignore
+from typing import List, Dict, Any
+import cv2 # type: ignore
+import numpy as np # type: ignore
 import base64
 from datetime import datetime
 import logging
-from typing import List, Dict, Any
-import json
 import os
-from ultralytics import YOLO
+import traceback
+from ultralytics import YOLO # type: ignore
 
-# Cấu hình logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# ===============================
+# Logging
+# ===============================
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger("AutoVRS_AI")
 
-app = FastAPI(title="AutoVRS AI Detection API", version="1.0.0")
-
-# CORS middleware
+# ===============================
+# FastAPI app
+# ===============================
+# ===============================
+# FastAPI app
+# ===============================
+# create FastAPI app and CORS
+app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -30,140 +37,221 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Pydantic models
+
+# Pydantic models for request/response
 class DetectionRequest(BaseModel):
     image_base64: str
     confidence_threshold: float = 0.25
     iou_threshold: float = 0.45
 
+
 class DetectionResult(BaseModel):
     success: bool
     message: str
-    detections: List[Dict[str, Any]]
-    processed_image_base64: str
-    statistics: Dict[str, Any]
+    detections: List[Dict[str, Any]] = []
+    processed_image_base64: str = ""
+    statistics: Dict[str, Any] = {}
     timestamp: str
+# ===== Single OBB inference helper (uses task='obb') =====
+class SingleOBBInference:
+    def __init__(self, model_path: str):
+        """Load a YOLO model with OBB outputs (task='obb')."""
+        self.model_path = model_path
+        # instantiate Ultralytics model with obb task to get .obb in results
+        self.model = YOLO(model_path, task='obb')
+        # Normalize names into a safe dict-like mapping
+        names = getattr(self.model, 'names', None)
+        if names is None:
+            self.names = {}
+        elif isinstance(names, dict):
+            self.names = names
+        elif isinstance(names, (list, tuple)):
+            self.names = {i: n for i, n in enumerate(names)}
+        else:
+            self.names = {}
+        logger.info(f"Loaded OBB model: {model_path}")
 
+    def infer_image(self, image_path: str):
+        """Run model on image_path and return detections + annotated image.
+        Returns dict: {'num_objects', 'detections', 'annotated_image'}
+        """
+        results = self.model(image_path)[0]
+        obb = getattr(results, 'obb', None)
+        names = getattr(results, 'names', self.names)
+        image = cv2.imread(image_path)
+
+        if obb is None or len(getattr(obb, 'cls', [])) == 0:
+            logger.warning("No objects detected (OBB).")
+            return {'num_objects': 0, 'detections': [], 'annotated_image': image}
+
+        # Safely obtain polygon coords (avoid using `or` on tensor-like objects)
+        polygons = getattr(obb, 'xyxyxyxy', None)
+        if polygons is None:
+            polygons = getattr(obb, 'xyxy', None)
+        conf = getattr(obb, 'conf', None)
+        cls = getattr(obb, 'cls', None)
+
+        # Convert PyTorch tensors to numpy arrays if necessary
+        try:
+            import importlib
+            _torch = importlib.import_module('torch')
+            if polygons is not None and isinstance(polygons, _torch.Tensor):
+                polygons = polygons.cpu().numpy()
+            if conf is not None and isinstance(conf, _torch.Tensor):
+                conf = conf.cpu().numpy()
+            if cls is not None and isinstance(cls, _torch.Tensor):
+                cls = cls.cpu().numpy()
+        except Exception:
+            # torch may not be installed or conversion may fail; continue gracefully
+            pass
+
+        detections = []
+        if cls is None or len(cls) == 0:
+            logger.warning("OBB results contain no classes")
+            return {'num_objects': 0, 'detections': [], 'annotated_image': image}
+
+        for i in range(len(cls)):
+            cls_id = int(cls[i])
+            # safe name lookup
+            if isinstance(names, dict):
+                class_name = names.get(cls_id, str(cls_id))
+            else:
+                try:
+                    class_name = names[cls_id] if cls_id < len(names) else str(cls_id)
+                except Exception:
+                    class_name = str(cls_id)
+
+            conf_val = float(conf[i]) if (conf is not None and len(conf) > i) else 0.0
+            poly = None
+            if polygons is not None:
+                try:
+                    poly = polygons[i]
+                except Exception:
+                    poly = None
+
+            detections.append({
+                'class_id': cls_id,
+                'class_name': class_name,
+                'conf': conf_val,
+                'polygon': poly.tolist() if (poly is not None and hasattr(poly, 'tolist')) else (list(poly) if poly is not None else [])
+            })
+
+        # draw OBB
+        annotated = self.draw_obb(image.copy(), polygons, conf, cls, names)
+
+        return {'num_objects': len(cls), 'detections': detections, 'annotated_image': annotated}
+
+    @staticmethod
+    def draw_obb(img, polygons, conf, cls, names):
+        for i in range(len(cls)):
+            try:
+                pts = np.array(polygons[i]).reshape((4,2)).astype(np.int32)
+                pts = pts.reshape((-1, 1, 2))
+                cv2.polylines(img, [pts], isClosed=True, color=(0,255,0), thickness=2)
+                x_text, y_text = pts[0][0]
+                cls_id = int(cls[i])
+                label = names.get(cls_id, str(cls_id)) if isinstance(names, dict) else (names[cls_id] if cls_id < len(names) else str(cls_id))
+                cv2.putText(img, f"{label}:{conf[i]:.2f}", (int(x_text), int(y_text)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,255), 2)
+            except Exception:
+                continue
+        return img
+
+
+# ===============================
+# AI Detection Service (uses SingleOBBInference)
+# ===============================
 class AIDetectionService:
-    def __init__(self, model_path: str = r"C:\Users\sonng\Code\APPAutoVRS\BE-AutoVRS\models\best.onnx"):
-        """Initialize Ultralytics YOLO model"""
+    def __init__(self, model_path: str):
         self.model_path = model_path
         self.model = None
-        self.load_model()
-        
-        # Class names tiếng Việt
+        self.inferer = None
         self.class_names_vi = {
-            0: 'Khuyết mạch',
-            1: 'Hở mạch', 
-            2: 'Thiếu linh kiện',
-            3: 'Đường dẫn bị hỏng',
-            4: 'Sai linh kiện',
-            5: 'Lỗi hàn',
-            6: 'Vết nứt',
-            7: 'Vết xước',
+            0: 'Bám Dính Không Tốt',
+            1: 'Châm Kim',
+            2: 'Dị vật',
+            3: 'Khuyết mạch',
+            4: 'Ngắn Mạch',
+            5: 'Thiếu Đồng',
+            6: 'Thừa Đồng',
+            7: 'Xước',
+            8: 'Orther'
         }
+        self.load_model()
 
     def load_model(self):
-        """Load Ultralytics YOLO model"""
-        logger.info(f"🚀 Loading Ultralytics YOLO model from: {self.model_path}")
-        
+        """Load model and wrap with OBB inferer."""
         try:
-            # Load model ONNX với Ultralytics
-            self.model = YOLO(self.model_path)
-            logger.info(f"✅ Model loaded successfully")
-            logger.info(f"✅ Model type: {type(self.model)}")
-            
-            # Test model với dummy prediction
-            logger.info("🧪 Testing model...")
-            
+            logger.info(f"🚀 Loading model (OBB) from {self.model_path}")
+            self.inferer = SingleOBBInference(self.model_path)
+            self.model = self.inferer.model
+            logger.info("✅ Model (OBB) loaded successfully")
         except Exception as e:
-            logger.error(f"❌ Failed to load model: {e}")
+            logger.exception(f"❌ Failed to load model: {e}")
+            logger.debug(traceback.format_exc())
             self.model = None
+            self.inferer = None
 
-    def detect_defects_from_file(self, image_path: str, confidence_threshold=0.1, iou_threshold=0.45):
-        """Chạy AI detection với file path - Logic giống CodeAI.ipynb"""
-        if self.model is None:
-            logger.error("❌ Model not loaded")
-            return [], None, {"error": "Model not loaded"}
-            
-        logger.info(f"🔍 Starting Ultralytics YOLO detection from file")
-        logger.info(f"🔍 Image path: {image_path}")
-        logger.info(f"🔍 Confidence threshold: {confidence_threshold}")
-        logger.info(f"🔍 IoU threshold: {iou_threshold}")
-        
+    def preprocess_image(self, image_base64: str) -> np.ndarray:
+        """Decode base64 image -> BGR numpy"""
         try:
-            # Thực hiện nhận diện với mô hình ONNX - Logic giống CodeAI.ipynb
-            print("🔍 Đang thực hiện nhận diện với mô hình ONNX...")
-            results = self.model(image_path, conf=confidence_threshold, iou=iou_threshold)
-            print("✅ Nhận diện hoàn tất!")
-            
-            # Vẽ kết quả lên ảnh
-            annotated_image_bgr = results[0].plot()
-            
-            # Hiển thị thông tin chi tiết về các đối tượng được phát hiện
-            print("\n📊 Chi tiết các đối tượng được phát hiện:")
-            print("="*50)
-            
-            # Lấy thông tin boxes từ kết quả
-            boxes = results[0].boxes
-            
-            # Tạo detection results
-            detections = []
-            
-            if len(boxes) == 0:
-                print("Không phát hiện đối tượng nào!")
-                logger.warning("❌ No objects detected!")
-            else:
-                for i, box in enumerate(boxes):
-                    class_id = int(box.cls[0])
-                    class_name = self.model.names[class_id]  # Lấy tên class từ model
-                    confidence = float(box.conf[0])
-                    # Lấy tọa độ dạng [x1, y1, x2, y2]
-                    coords = [round(x) for x in box.xyxy[0].tolist()]
-                    
-                    print(f"📌 Đối tượng {i+1}:")
-                    print(f"   - Class: {class_name} (ID: {class_id})")
-                    print(f"   - Độ tin cậy (Confidence): {confidence:.3f}")
-                    print(f"   - Tọa độ [x1, y1, x2, y2]: {coords}")
-                    print("-"*50)
-                    
-                    # Thêm vào detection results
-                    detections.append({
-                        'bbox': coords,
-                        'confidence': confidence,
-                        'class_id': class_id,
-                        'class_name': class_name,
-                        'class_name_vi': self.class_names_vi.get(class_id, class_name)
-                    })
-            
-            # Thống kê
-            stats = {
-                'total_defects': len(detections),
-                'defect_types': {},
-                'max_confidence': max([d['confidence'] for d in detections]) if detections else 0.0,
-                'avg_confidence': sum([d['confidence'] for d in detections]) / len(detections) if detections else 0.0
-            }
-            
-            # Đếm số lượng từng loại defect
-            for d in detections:
-                defect_type = d['class_name_vi']
-                stats['defect_types'][defect_type] = stats['defect_types'].get(defect_type, 0) + 1
-            
-            # So sánh số lượng phát hiện từ mô hình ONNX
-            print(f"\n📈 Tổng số đối tượng phát hiện được: {len(boxes)}")
-            logger.info(f"✅ Detection completed: {len(detections)} defects found")
-            
-            return detections, annotated_image_bgr, stats
-            
+            image_data = base64.b64decode(image_base64)
+            nparr = np.frombuffer(image_data, np.uint8)
+            image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if image is None:
+                raise ValueError("Decoded image is None")
+            return image
         except Exception as e:
-            logger.error(f"❌ Detection error: {e}")
-            import traceback
-            logger.error(f"❌ Traceback: {traceback.format_exc()}")
-            return [], None, {"error": str(e)}
+            raise ValueError(f"Failed to decode base64 image: {e}")
+
+    def save_image(self, image: np.ndarray, folder: str, prefix: str):
+        """Save image to folder with timestamp"""
+        os.makedirs(folder, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{prefix}_{timestamp}.jpg"
+        path = os.path.join(folder, filename)
+        cv2.imwrite(path, image)
+        return path, filename
+
+    def encode_image_to_base64(self, image: np.ndarray) -> str:
+        _, buffer = cv2.imencode(".jpg", image)
+        return base64.b64encode(buffer.tobytes()).decode("utf-8")
+
+    def run_inference(self, image_path: str, confidence_threshold: float, iou_threshold: float):
+        """Run OBB inference via SingleOBBInference."""
+        if self.inferer is None:
+            raise RuntimeError("Model not loaded")
+
+        try:
+            result = self.inferer.infer_image(image_path)
+        except Exception as e:
+            logger.exception(f"Inference error for image {image_path}: {e}")
+            logger.debug(traceback.format_exc())
+            raise
+
+        detections = result.get('detections', [])
+        annotated_image = result.get('annotated_image', None)
+
+        # Stats
+        stats = {
+            "total_defects": len(detections),
+            "defect_types": {},
+            "max_confidence": max([d['conf'] for d in detections]) if detections else 0.0,
+            "avg_confidence": (sum([d['conf'] for d in detections]) / len(detections)) if detections else 0.0
+        }
+        for d in detections:
+            t = d.get('class_name')
+            t_vi = self.class_names_vi.get(d.get('class_id'), t)
+            stats['defect_types'][t_vi] = stats['defect_types'].get(t_vi, 0) + 1
+
+        return detections, annotated_image, stats
 
 # Initialize AI service
-ai_service = AIDetectionService()
+MODEL_PATH = r"C:\Users\sonng\Code\APPAutoVRS\BE-AutoVRS\models\multi.onnx"
+ai_service = AIDetectionService(MODEL_PATH)
 
+# ===============================
+# FastAPI endpoints
+# ===============================
 @app.on_event("startup")
 async def startup_event():
     logger.info("🚀 AutoVRS AI Detection API started")
@@ -187,59 +275,34 @@ async def health_check():
 
 @app.post("/api/ai-detection", response_model=DetectionResult)
 async def ai_detection(request: DetectionRequest):
-    """API endpoint cho AI detection"""
     try:
-        # Decode base64 image
-        image_data = base64.b64decode(request.image_base64)
-        nparr = np.frombuffer(image_data, np.uint8)
-        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
-        if image is None:
-            raise HTTPException(status_code=400, detail="Invalid image data")
-        
-        # Tạo folder Image_input nếu chưa tồn tại
+        # ===============================
+        # 1. Preprocess
+        # ===============================
+        image = ai_service.preprocess_image(request.image_base64)
+
+        # ===============================
+        # 2. Save input image
+        # ===============================
         input_folder = r"C:\Users\sonng\Code\APPAutoVRS\BE-AutoVRS\Image_input"
-        os.makedirs(input_folder, exist_ok=True)
-        
-        # Tạo folder Image_output nếu chưa tồn tại
-        output_folder = r"C:\Users\sonng\Code\APPAutoVRS\BE-AutoVRS\Image_output"
-        os.makedirs(output_folder, exist_ok=True)
-        
-        # Tạo tên file với timestamp
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        input_filename = f"ai_input_{timestamp}.jpg"
-        processed_filename = f"ai_processed_{timestamp}.jpg"
-        
-        # Bước 1: Lưu ảnh gốc từ base64 vào Image_input folder
-        input_image_path = os.path.join(input_folder, input_filename)
-        cv2.imwrite(input_image_path, image)
-        logger.info(f"💾 Saved input image to: {input_image_path}")
-        print(f"✅ Đã lưu ảnh input tại: {input_image_path}")
-        
-        # Bước 2: Chạy AI detection với file path (giống CodeAI.ipynb)
-        detections, result_image, stats = ai_service.detect_defects_from_file(
-            input_image_path, 
-            request.confidence_threshold, 
-            request.iou_threshold
+        input_image_path, input_filename = ai_service.save_image(image, input_folder, "ai_input")
+
+        # ===============================
+        # 3. Run inference
+        # ===============================
+        detections, annotated_image, stats = ai_service.run_inference(
+            input_image_path, request.confidence_threshold, request.iou_threshold
         )
-        
-        # Bước 3: Lưu ảnh đã xử lý vào Image_output folder
-        if result_image is not None:
-            output_save_path = os.path.join(output_folder, processed_filename)
-            cv2.imwrite(output_save_path, result_image)
-            logger.info(f"💾 Saved processed image to: {output_save_path}")
-            print(f"✅ Đã lưu ảnh kết quả tại: {output_save_path}")
-            
-            # Encode result image
-            _, buffer = cv2.imencode('.jpg', result_image)
-            result_image_base64 = base64.b64encode(buffer.tobytes()).decode('utf-8')
-        else:
-            # Nếu không có result_image, dùng ảnh gốc
-            _, buffer = cv2.imencode('.jpg', image)
-            result_image_base64 = base64.b64encode(buffer.tobytes()).decode('utf-8')
-        
-        logger.info(f"✅ Detection completed: {len(detections)} defects found")
-        
+
+        # ===============================
+        # 4. Save annotated image
+        # ===============================
+        output_folder = r"C:\Users\sonng\Code\APPAutoVRS\BE-AutoVRS\Image_output"
+        output_image_path, processed_filename = ai_service.save_image(annotated_image, output_folder, "ai_processed")
+
+        # Encode to base64
+        result_image_base64 = ai_service.encode_image_to_base64(annotated_image)
+
         return DetectionResult(
             success=True,
             message=f"Detection completed successfully. Found {len(detections)} defects. Images saved: {input_filename} → {processed_filename}",
@@ -248,11 +311,18 @@ async def ai_detection(request: DetectionRequest):
             statistics=stats,
             timestamp=datetime.now().isoformat()
         )
-        
-    except Exception as e:
-        logger.error(f"❌ Detection error: {e}")
-        raise HTTPException(status_code=500, detail=f"Detection failed: {str(e)}")
 
+    except Exception as e:
+        # log full traceback to server log (use logger.exception to include stacktrace)
+        logger.exception(f"❌ Detection failed: {e}")
+        logger.debug(traceback.format_exc()) # type: ignore
+        # keep HTTP 500 response but avoid exposing stacktrace in response
+        raise HTTPException(status_code=500, detail="Detection failed (check server logs for details)")
+# ...existing code...
+
+# ===============================
+# Run server
+# ===============================
 if __name__ == "__main__":
-    import uvicorn
+    import uvicorn # type: ignore
     uvicorn.run(app, host="0.0.0.0", port=8082, log_level="info")

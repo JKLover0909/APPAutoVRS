@@ -1,6 +1,6 @@
 import asyncio
 import json
-import websockets
+import websockets # type: ignore
 from concurrent.futures import ThreadPoolExecutor
 
 CONNECTED = set()

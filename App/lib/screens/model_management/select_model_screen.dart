@@ -190,17 +190,28 @@ class _SelectModelScreenState extends State<SelectModelScreen> {
                   DataCell(Text(model['line_size']?.toString() ?? 'N/A')),
                   DataCell(Text(model['space_size']?.toString() ?? 'N/A')),
                   DataCell(
-                    ElevatedButton(
-                      onPressed: () => _selectModel(model),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green.shade500,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ElevatedButton(
+                          onPressed: () => _selectModel(model),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green.shade500,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                          child: const Text('Chọn'),
                         ),
-                      ),
-                      child: const Text('Chọn'),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          tooltip: 'Xóa',
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () => _onDeleteModel(model),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -294,6 +305,66 @@ class _SelectModelScreenState extends State<SelectModelScreen> {
           });
         }
       }
+    }
+  }
+
+  Future<void> _onDeleteModel(Map<String, dynamic> model) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Xác nhận xóa'),
+        content: Text(
+          'Bạn có chắc chắn muốn xóa mã hàng ${model['id_model']} không?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Xóa'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final db = LocalDatabaseService();
+      final id = model['id_model'];
+      if (id is int) {
+        final deleted = await db.deleteModel(id);
+        if (deleted > 0) {
+          await _loadModels();
+          scaffoldMessengerKey.currentState?.showSnackBar(
+            SnackBar(
+              content: Text('Xóa thành công mã hàng $id'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          scaffoldMessengerKey.currentState?.showSnackBar(
+            const SnackBar(
+              content: Text('Không tìm thấy mã hàng để xóa'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      } else {
+        scaffoldMessengerKey.currentState?.showSnackBar(
+          const SnackBar(
+            content: Text('ID mã hàng không hợp lệ'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(content: Text('Lỗi khi xóa: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 

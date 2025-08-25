@@ -97,8 +97,8 @@ class LocalDatabaseService {
         NG_rate REAL,
         fakeDef REAL,
         board_quantity INTEGER,
-        tbModelid INTEGER,
-        FOREIGN KEY (tbModelid) REFERENCES tbModel(id)
+        tbModelid_model INTEGER,
+        FOREIGN KEY (tbModelid_model) REFERENCES tbModel(id_model)
       )
     ''');
 
@@ -163,6 +163,12 @@ class LocalDatabaseService {
   Future<List<Map<String, dynamic>>> getAllModels() async {
     final db = await database;
     return await db.query('tbModel');
+  }
+
+  /// Delete a model by its id_model. Returns number of rows deleted.
+  Future<int> deleteModel(int id) async {
+    final db = await database;
+    return await db.delete('tbModel', where: 'id_model = ?', whereArgs: [id]);
   }
 
   Future<Map<String, dynamic>?> getModelById(int id) async {
@@ -459,7 +465,7 @@ class LocalDatabaseService {
     final db = await database;
     final lots = await db.query(
       'tbLot',
-      where: 'tbModelid = ?',
+      where: 'tbModelid_model = ?',
       whereArgs: [idModel],
       orderBy: 'id_lot ASC',
     );

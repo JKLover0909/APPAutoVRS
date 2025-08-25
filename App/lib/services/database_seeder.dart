@@ -60,9 +60,24 @@ class DatabaseSeeder {
 
   Future<void> _seedLots(LocalDatabaseService db) async {
     final lots = [
-      {'NG_rate': 0.08, 'fakeDef': 0.02, 'board_quantity': 500, 'tbModelid': 1},
-      {'NG_rate': 0.12, 'fakeDef': 0.01, 'board_quantity': 750, 'tbModelid': 2},
-      {'NG_rate': 0.05, 'fakeDef': 0.03, 'board_quantity': 320, 'tbModelid': 1},
+      {
+        'NG_rate': 0.08,
+        'fakeDef': 0.02,
+        'board_quantity': 500,
+        'tbModelid_model': 1,
+      },
+      {
+        'NG_rate': 0.12,
+        'fakeDef': 0.01,
+        'board_quantity': 750,
+        'tbModelid_model': 2,
+      },
+      {
+        'NG_rate': 0.05,
+        'fakeDef': 0.03,
+        'board_quantity': 320,
+        'tbModelid_model': 1,
+      },
     ];
 
     for (var lot in lots) {

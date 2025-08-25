@@ -3,7 +3,7 @@ import '../services/local_database_service.dart';
 
 class StatisticsProvider extends ChangeNotifier {
   final LocalDatabaseService _db = LocalDatabaseService();
-  
+
   // Cached data
   Map<String, int> _defectData = {};
   List<Map<String, dynamic>> _lotStatistics = [];
@@ -14,19 +14,22 @@ class StatisticsProvider extends ChangeNotifier {
 
   // Getters
   Map<String, int> get defectData => Map.unmodifiable(_defectData);
-  List<Map<String, dynamic>> get lotStatistics => List.unmodifiable(_lotStatistics);
-  List<Map<String, dynamic>> get defectStatistics => List.unmodifiable(_defectStatistics);
+  List<Map<String, dynamic>> get lotStatistics =>
+      List.unmodifiable(_lotStatistics);
+  List<Map<String, dynamic>> get defectStatistics =>
+      List.unmodifiable(_defectStatistics);
   List<Map<String, dynamic>> get lots => List.unmodifiable(_lots);
   String get selectedLot => _selectedLot;
   bool get isLoading => _isLoading;
 
-  int get totalDefects => _defectData.values.fold(0, (sum, value) => sum + value);
+  int get totalDefects =>
+      _defectData.values.fold(0, (sum, value) => sum + value);
 
   // Initialize and load data from database
   Future<void> initialize() async {
     _isLoading = true;
     notifyListeners();
-    
+
     try {
       await loadDefectStatistics();
       await loadLotStatistics();
@@ -58,7 +61,8 @@ class StatisticsProvider extends ChangeNotifier {
           'lotId': 'LOT-${stat['id_lot']}',
           'lotName': 'Lot ${stat['id_lot']}',
           'boardCount': stat['actual_boards'] ?? 0,
-          'ngRate': ((stat['ng_boards'] ?? 0) / (stat['actual_boards'] ?? 1)) * 100,
+          'ngRate':
+              ((stat['ng_boards'] ?? 0) / (stat['actual_boards'] ?? 1)) * 100,
           'okCount': stat['ok_boards'] ?? 0,
           'ngCount': stat['ng_boards'] ?? 0,
           'createdDate': DateTime.now().toIso8601String().substring(0, 10),
@@ -78,7 +82,7 @@ class StatisticsProvider extends ChangeNotifier {
       _lots = allLots.map((lot) {
         return {
           'lot_id': 'LOT-${lot['id_lot']}',
-          'model_id': lot['tbModelid'] ?? 1,
+          'model_id': lot['tbModelid_model'] ?? 1,
           'total_boards': lot['board_quantity'] ?? 0,
           'id_lot': lot['id_lot'],
         };
@@ -104,7 +108,7 @@ class StatisticsProvider extends ChangeNotifier {
     try {
       final boards = await _db.getBoardsByLot(lotId);
       final defects = <Map<String, dynamic>>[];
-      
+
       for (var board in boards) {
         final boardDefects = await _db.getDefectsByBoard(board['id_board']);
         for (var defect in boardDefects) {
@@ -121,7 +125,7 @@ class StatisticsProvider extends ChangeNotifier {
           });
         }
       }
-      
+
       return defects;
     } catch (e) {
       debugPrint('Error getting defects for lot: $e');
@@ -140,7 +144,7 @@ class StatisticsProvider extends ChangeNotifier {
     try {
       final boards = await _db.getBoardsByLot(lotId);
       final allDefects = <Map<String, dynamic>>[];
-      
+
       for (final board in boards) {
         final defects = await _db.getDefectsByBoard(board['id_board']);
         allDefects.addAll(defects);
@@ -161,7 +165,7 @@ class StatisticsProvider extends ChangeNotifier {
         return {
           'type': entry.key,
           'count': entry.value['count'],
-          'percentage': allDefects.isNotEmpty 
+          'percentage': allDefects.isNotEmpty
               ? (entry.value['count']! / allDefects.length * 100).toDouble()
               : 0.0,
         };
@@ -180,11 +184,15 @@ class StatisticsProvider extends ChangeNotifier {
 
   // Chart data helpers
   List<Map<String, dynamic>> getDefectChartData() {
-    return _defectData.entries.map((entry) => {
-      'label': entry.key,
-      'value': entry.value,
-      'color': _getDefectColor(entry.key),
-    }).toList();
+    return _defectData.entries
+        .map(
+          (entry) => {
+            'label': entry.key,
+            'value': entry.value,
+            'color': _getDefectColor(entry.key),
+          },
+        )
+        .toList();
   }
 
   int _getDefectColor(String defectType) {
@@ -204,9 +212,18 @@ class StatisticsProvider extends ChangeNotifier {
 
   // Get summary statistics
   Map<String, dynamic> getSummaryStatistics() {
-    final totalBoards = _lotStatistics.fold<int>(0, (sum, lot) => sum + (lot['boardCount'] as int));
-    final totalNg = _lotStatistics.fold<int>(0, (sum, lot) => sum + (lot['ngCount'] as int));
-    final totalOk = _lotStatistics.fold<int>(0, (sum, lot) => sum + (lot['okCount'] as int));
+    final totalBoards = _lotStatistics.fold<int>(
+      0,
+      (sum, lot) => sum + (lot['boardCount'] as int),
+    );
+    final totalNg = _lotStatistics.fold<int>(
+      0,
+      (sum, lot) => sum + (lot['ngCount'] as int),
+    );
+    final totalOk = _lotStatistics.fold<int>(
+      0,
+      (sum, lot) => sum + (lot['okCount'] as int),
+    );
     final overallNgRate = totalBoards > 0 ? (totalNg / totalBoards) * 100 : 0.0;
 
     return {
