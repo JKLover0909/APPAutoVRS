@@ -241,6 +241,9 @@ class AIDetectionService:
         for d in detections:
             t = d.get('class_name')
             t_vi = self.class_names_vi.get(d.get('class_id'), t)
+            # ensure detection contains class_name_vi and confidence keys for client
+            d['class_name_vi'] = t_vi
+            d['confidence'] = d.get('conf', 0.0)
             stats['defect_types'][t_vi] = stats['defect_types'].get(t_vi, 0) + 1
 
         return detections, annotated_image, stats

@@ -67,12 +67,38 @@ class LocalDatabaseService {
 
       debugPrint('Database path: $path');
 
+      // If the database file exists but is not writable (e.g., read-only attribute),
+      // attempt to create a writable copy and use that instead. This handles cases
+      // where the app might be pointing at a bundled/read-only DB.
+      final dbFile = File(path);
+      if (await dbFile.exists()) {
+        try {
+          final raf = await dbFile.open(mode: FileMode.append);
+          await raf.close();
+        } catch (e) {
+          debugPrint(
+            'Database file not writable ($e). Attempting writable fallback.',
+          );
+          final dir = dbFile.parent.path;
+          final fallbackPath = join(dir, 'autovrs_rw.db');
+          final fallbackFile = File(fallbackPath);
+          if (!await fallbackFile.exists()) {
+            // copy read-only DB to writable copy
+            await dbFile.copy(fallbackPath);
+            debugPrint('Copied DB to writable fallback: $fallbackPath');
+          } else {
+            debugPrint('Using existing writable fallback DB: $fallbackPath');
+          }
+          path = fallbackPath;
+        }
+      }
+
       return await openDatabase(
         path,
         version: 1,
         onCreate: _createTables,
         onOpen: (db) {
-          debugPrint('Database opened successfully');
+          debugPrint('Database opened successfully at $path');
         },
       );
     } catch (e) {
@@ -287,13 +313,45 @@ class LocalDatabaseService {
   /// Update fields of a defect row by its id_defect.
   /// Returns number of rows affected.
   Future<int> updateDefect(int idDefect, Map<String, dynamic> fields) async {
-    final db = await database;
-    return await db.update(
-      'tbDefect',
-      fields,
-      where: 'id_defect = ?',
-      whereArgs: [idDefect],
-    );
+    Database db = await database;
+    try {
+      return await db.update(
+        'tbDefect',
+        fields,
+        where: 'id_defect = ?',
+        whereArgs: [idDefect],
+      );
+    } catch (e) {
+      debugPrint('LocalDatabaseService.updateDefect failed: $e');
+      final errMsg = e.toString();
+      // If failure caused by read-only file system, try to reinitialize DB (will trigger writable fallback)
+      if (errMsg.toLowerCase().contains('read-only') ||
+          errMsg.toLowerCase().contains('read only')) {
+        debugPrint(
+          'Detected read-only DB; attempting to reopen database and retry update',
+        );
+        try {
+          if (_db != null) {
+            try {
+              await _db!.close();
+            } catch (_) {}
+            _db = null;
+          }
+          db =
+              await database; // re-open (fallback copy logic in _initDatabase will run)
+          return await db.update(
+            'tbDefect',
+            fields,
+            where: 'id_defect = ?',
+            whereArgs: [idDefect],
+          );
+        } catch (re) {
+          debugPrint('Retry after reopening DB failed: $re');
+          rethrow;
+        }
+      }
+      rethrow;
+    }
   }
 
   // ========== CONFIG OPERATIONS ==========

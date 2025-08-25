@@ -23,6 +23,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
   // index in _defects (0-based). If no defects, stays at 0.
   int _currentDefectIndex = 0;
   List<Map<String, dynamic>> _defects = [];
+  int _defectListReloadToken = 0;
   String? _currentBoardId;
   final _db = LocalDatabaseService();
 
@@ -171,6 +172,50 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
           _hasAnalysisResult = true;
           _isAnalyzing = false;
         });
+        // Persist AI judgement into local database for the current defect (if any)
+        try {
+          if (_defects.isNotEmpty &&
+              _currentDefectIndex >= 0 &&
+              _currentDefectIndex < _defects.length) {
+            final current = _defects[_currentDefectIndex];
+            final dynamic rawId =
+                current['id'] ?? current['id_defect'] ?? current['defect_id'];
+            final int? id = rawId is int
+                ? rawId
+                : int.tryParse(rawId?.toString() ?? '');
+            final hasDetections =
+                _analysisResult != null &&
+                _analysisResult!.detections.isNotEmpty;
+            final verdict = hasDetections ? 'NG' : 'OK';
+            String detectedType = '';
+            if (hasDetections) {
+              final first = _analysisResult!.detections.first;
+              // Use Vietnamese name when available, otherwise fall back to className
+              detectedType = first.classNameVi.isNotEmpty
+                  ? first.classNameVi
+                  : (first.className.isNotEmpty ? first.className : '');
+            }
+
+            if (id != null) {
+              await _db.updateDefect(id, {
+                'time': DateTime.now().toIso8601String(),
+                'type': detectedType,
+                'judgement': verdict,
+              });
+
+              // Update in-memory list so UI reflects changes immediately
+              setState(() {
+                current['type'] = detectedType;
+                current['judgement'] = verdict;
+                current['time'] = DateTime.now().toIso8601String();
+                // bump reload token so DefectListWidget re-queries DB
+                _defectListReloadToken++;
+              });
+            }
+          }
+        } catch (e) {
+          debugPrint('Failed to persist AI result locally: $e');
+        }
       } else {
         throw Exception(_aiDetectionService.lastError ?? "Phân tích thất bại");
       }
@@ -905,7 +950,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                               DefectListWidget(
                                 boardId: int.tryParse(vrsProvider.currentBoard),
                                 height: 220,
-                                reloadToken: 0,
+                                reloadToken: _defectListReloadToken,
                               ),
 
                               const SizedBox(height: 12),
@@ -1263,10 +1308,13 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
   Widget _buildDefectDetectionResults(
     AutoVRSWebSocketService webSocketService,
   ) {
+    // Prefer local analysis result (from immediate AI detection). If absent,
+    // fall back to websocket-provided analysis/detectionResults.
+    final local = _analysisResult;
     final detectionResults = webSocketService.lastDetectionResults;
     final analysis = webSocketService.lastAnalysis;
 
-    if (detectionResults == null && analysis == null) {
+    if (local == null && detectionResults == null && analysis == null) {
       return const SizedBox.shrink();
     }
 
@@ -1295,8 +1343,27 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
           ),
           const SizedBox(height: 8),
 
-          // Hiển thị số lượng lỗi tổng
-          if (analysis != null) ...[
+          // Hiển thị số lượng lỗi tổng -- prefer local result
+          if (local != null) ...[
+            Row(
+              children: [
+                const Text('Tổng số lỗi: '),
+                Text(
+                  '${local.detections.length}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: local.detections.isNotEmpty
+                        ? Colors.red
+                        : Colors.green,
+                  ),
+                ),
+              ],
+            ),
+
+            // Hiển thị lỗi theo loại (tóm tắt)
+            const SizedBox(height: 4),
+            ..._buildLocalDefectTypeRows(local),
+          ] else if (analysis != null) ...[
             Row(
               children: [
                 const Text('Tổng số lỗi: '),
@@ -1372,6 +1439,34 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
     );
   }
 
+  List<Widget> _buildLocalDefectTypeRows(AIDetectionResult local) {
+    final Map<String, int> counts = {};
+    for (final d in local.detections) {
+      final key = (d.classNameVi.isNotEmpty)
+          ? d.classNameVi
+          : (d.className.isNotEmpty ? d.className : 'Unknown');
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+
+    if (counts.isEmpty) return [const Text('Không phát hiện lỗi')];
+
+    final rows = <Widget>[];
+    counts.forEach((k, v) {
+      rows.add(
+        Padding(
+          padding: const EdgeInsets.only(left: 16, top: 2),
+          child: Row(
+            children: [
+              Text('• ${_getDefectDisplayName(k)}: '),
+              Text('$v', style: const TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ),
+      );
+    });
+    return rows;
+  }
+
   /// Chuyển đổi tên lỗi kỹ thuật sang tên hiển thị
   String _getDefectDisplayName(String technicalName) {
     switch (technicalName.toLowerCase()) {
@@ -1398,13 +1493,17 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
       return 'Không phát hiện lỗi';
     }
 
-    // Get unique defect types
+    // Get unique defect types (prefer Vietnamese name, fallback to className)
     final defectTypes = <String>{};
     for (final detection in _analysisResult!.detections) {
-      defectTypes.add(detection.classNameVi);
+      final t = detection.classNameVi.isNotEmpty
+          ? detection.classNameVi
+          : (detection.className.isNotEmpty
+                ? detection.className
+                : 'Không xác định');
+      defectTypes.add(t);
     }
 
-    // Join defect types with comma if multiple
     return defectTypes.join(', ');
   }
 }
