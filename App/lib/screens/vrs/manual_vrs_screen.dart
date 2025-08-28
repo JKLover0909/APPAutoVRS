@@ -36,6 +36,8 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
   bool _isAnalyzing = false;
   bool _hasAnalysisResult = false;
   AIDetectionResult? _analysisResult;
+  String?
+  _pendingJudgement; // 'OK' or 'NG' when user selects but not yet confirmed
   // Uint8List? _capturedFrame; // Removed unused field
 
   @override
@@ -48,6 +50,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
 
     // Kết nối AutoVRS WebSocket khi khởi tạo màn hình
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final webSocketService = Provider.of<AutoVRSWebSocketService>(
         context,
         listen: false,
@@ -71,6 +74,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
   Future<void> _loadDefectsForBoard(String? boardIdStr) async {
     final id = int.tryParse(boardIdStr ?? '');
     if (id == null) {
+      if (!mounted) return;
       setState(() {
         _defects = [];
         _currentDefectIndex = 0;
@@ -79,6 +83,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
     }
 
     final list = await _db.getDefectsByBoard(id);
+    if (!mounted) return;
     setState(() {
       _defects = list;
       _currentDefectIndex = (_defects.isNotEmpty) ? 0 : 0;
@@ -167,64 +172,25 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
       );
 
       if (result != null && result.success) {
+        if (!mounted) return;
         setState(() {
           _analysisResult = result;
           _hasAnalysisResult = true;
+          _pendingJudgement =
+              null; // reset any previous selection on new analysis
           _isAnalyzing = false;
         });
-        // Persist AI judgement into local database for the current defect (if any)
-        try {
-          if (_defects.isNotEmpty &&
-              _currentDefectIndex >= 0 &&
-              _currentDefectIndex < _defects.length) {
-            final current = _defects[_currentDefectIndex];
-            final dynamic rawId =
-                current['id'] ?? current['id_defect'] ?? current['defect_id'];
-            final int? id = rawId is int
-                ? rawId
-                : int.tryParse(rawId?.toString() ?? '');
-            final hasDetections =
-                _analysisResult != null &&
-                _analysisResult!.detections.isNotEmpty;
-            final verdict = hasDetections ? 'NG' : 'OK';
-            String detectedType = '';
-            if (hasDetections) {
-              final first = _analysisResult!.detections.first;
-              // Use Vietnamese name when available, otherwise fall back to className
-              detectedType = first.classNameVi.isNotEmpty
-                  ? first.classNameVi
-                  : (first.className.isNotEmpty ? first.className : '');
-            }
-
-            if (id != null) {
-              await _db.updateDefect(id, {
-                'time': DateTime.now().toIso8601String(),
-                'type': detectedType,
-                'judgement': verdict,
-              });
-
-              // Update in-memory list so UI reflects changes immediately
-              setState(() {
-                current['type'] = detectedType;
-                current['judgement'] = verdict;
-                current['time'] = DateTime.now().toIso8601String();
-                // bump reload token so DefectListWidget re-queries DB
-                _defectListReloadToken++;
-              });
-            }
-          }
-        } catch (e) {
-          debugPrint('Failed to persist AI result locally: $e');
-        }
+        // Do NOT persist verdict here. Wait for user to press OK/NG to
+        // confirm judgment. Persistence will be handled in _makeJudgment().
       } else {
         throw Exception(_aiDetectionService.lastError ?? "Phân tích thất bại");
       }
     } catch (e) {
-      setState(() {
-        _isAnalyzing = false;
-      });
-
       if (mounted) {
+        setState(() {
+          _isAnalyzing = false;
+        });
+
         scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
         );
@@ -247,6 +213,11 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
         final isSmallScreen = screenWidth < 1200;
         final padding = isSmallScreen ? 16.0 : 24.0;
         final vrsProvider = Provider.of<VRSProvider>(context);
+        final webSocketService = Provider.of<AutoVRSWebSocketService>(
+          context,
+          listen: false,
+        );
+
         return Padding(
           padding: EdgeInsets.all(padding),
           child: Column(
@@ -1063,52 +1034,49 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
 
                               const SizedBox(height: 16),
 
-                              // Capture and Analyze Button
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      onPressed: _isAnalyzing
-                                          ? null
-                                          : _captureAndAnalyze,
-                                      icon: _isAnalyzing
-                                          ? const SizedBox(
-                                              width: 16,
-                                              height: 16,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                valueColor:
-                                                    AlwaysStoppedAnimation<
-                                                      Color
-                                                    >(Colors.white),
+                              // Capture and Analyze Button (hidden when analysis result exists or when viewing captured image)
+                              if (!_hasAnalysisResult &&
+                                  !webSocketService.isViewingCapturedImage) ...[
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: ElevatedButton.icon(
+                                        onPressed: _isAnalyzing
+                                            ? null
+                                            : _captureAndAnalyze,
+                                        icon: _isAnalyzing
+                                            ? const SizedBox(
+                                                width: 16,
+                                                height: 16,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  valueColor:
+                                                      AlwaysStoppedAnimation<
+                                                        Color
+                                                      >(Colors.white),
+                                                ),
+                                              )
+                                            : const Icon(
+                                                FeatherIcons.camera,
+                                                size: 16,
                                               ),
-                                            )
-                                          : Icon(
-                                              _hasAnalysisResult
-                                                  ? FeatherIcons.arrowRight
-                                                  : FeatherIcons.camera,
-                                              size: 16,
-                                            ),
-                                      label: Text(
-                                        _isAnalyzing
-                                            ? 'Đang phân tích...'
-                                            : (_hasAnalysisResult
-                                                  ? 'Tiếp theo'
-                                                  : 'Chụp lại'),
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: _hasAnalysisResult
-                                            ? Colors.green
-                                            : Colors.blue,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 12,
+                                        label: Text(
+                                          _isAnalyzing
+                                              ? 'Đang phân tích...'
+                                              : 'Chụp lại',
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.blue,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 12,
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
+                                  ],
+                                ),
+                              ],
 
                               const SizedBox(height: 16),
 
@@ -1154,12 +1122,8 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                           ],
                                         ),
                                         const SizedBox(height: 12),
-
-                                        // Hiển thị kết quả defect detection
-                                        _buildDefectDetectionResults(
-                                          webSocketService,
-                                        ),
-
+                                        // (Removed) defect detection summary card to reduce UI clutter
+                                        const SizedBox.shrink(),
                                         const SizedBox(height: 16),
                                       ],
                                     );
@@ -1168,44 +1132,112 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                 },
                               ),
 
-                              // Manual review buttons
-                              Row(
+                              // Manual review: select OK/NG first, then confirm
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  Expanded(
-                                    child: ElevatedButton(
-                                      onPressed: () => _makeJudgment(true),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.green,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 16,
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: ElevatedButton(
+                                          onPressed:
+                                              (!_hasAnalysisResult ||
+                                                  (_pendingJudgement != null &&
+                                                      _pendingJudgement !=
+                                                          'OK'))
+                                              ? null
+                                              : () {
+                                                  setState(() {
+                                                    // select OK, deselect NG
+                                                    if (_pendingJudgement ==
+                                                        'OK') {
+                                                      _pendingJudgement = null;
+                                                    } else {
+                                                      _pendingJudgement = 'OK';
+                                                    }
+                                                  });
+                                                },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor:
+                                                _pendingJudgement == 'OK'
+                                                ? Colors.green
+                                                : Colors.green.shade600,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 16,
+                                            ),
+                                          ),
+                                          child: const Text(
+                                            'OK',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
                                         ),
                                       ),
-                                      child: const Text(
-                                        'OK',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: ElevatedButton(
+                                          onPressed:
+                                              (!_hasAnalysisResult ||
+                                                  (_pendingJudgement != null &&
+                                                      _pendingJudgement !=
+                                                          'NG'))
+                                              ? null
+                                              : () {
+                                                  setState(() {
+                                                    if (_pendingJudgement ==
+                                                        'NG') {
+                                                      _pendingJudgement = null;
+                                                    } else {
+                                                      _pendingJudgement = 'NG';
+                                                    }
+                                                  });
+                                                },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor:
+                                                _pendingJudgement == 'NG'
+                                                ? Colors.red
+                                                : Colors.red.shade600,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 16,
+                                            ),
+                                          ),
+                                          child: const Text(
+                                            'NG',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
                                         ),
                                       ),
-                                    ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: ElevatedButton(
-                                      onPressed: () => _makeJudgment(false),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.red,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 16,
-                                        ),
+
+                                  const SizedBox(height: 12),
+
+                                  // Confirm button: only enabled after user selects OK/NG
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton.icon(
+                                      onPressed:
+                                          (_pendingJudgement != null &&
+                                              _hasAnalysisResult &&
+                                              _defects.isNotEmpty)
+                                          ? () => _makeJudgment(
+                                              _pendingJudgement == 'OK',
+                                            )
+                                          : null,
+                                      icon: const Icon(FeatherIcons.check),
+                                      label: const Text(
+                                        'Xác nhận và chuyển lỗi',
                                       ),
-                                      child: const Text(
-                                        'NG',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
+                                      style: ElevatedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 12,
                                         ),
                                       ),
                                     ),
@@ -1226,7 +1258,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                       ? _nextDefect
                                       : null,
                                   icon: const Icon(FeatherIcons.arrowRight),
-                                  label: const Text('Bo tiếp theo'),
+                                  label: const Text('Chuyển Bo'),
                                   style: ElevatedButton.styleFrom(
                                     padding: const EdgeInsets.symmetric(
                                       vertical: 12,
@@ -1283,7 +1315,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
     }
   }
 
-  void _makeJudgment(bool isOK) {
+  Future<void> _makeJudgment(bool isOK) async {
     final result = isOK ? 'OK' : 'NG';
 
     scaffoldMessengerKey.currentState?.showSnackBar(
@@ -1301,6 +1333,68 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
       Future.delayed(const Duration(milliseconds: 500), () {
         _nextDefect();
       });
+    }
+
+    // Persist judgment to DB for the current defect
+    try {
+      if (_defects.isNotEmpty &&
+          _currentDefectIndex >= 0 &&
+          _currentDefectIndex < _defects.length) {
+        final current = _defects[_currentDefectIndex];
+        final dynamic rawId =
+            current['id'] ?? current['id_defect'] ?? current['defect_id'];
+        final int? id = rawId is int
+            ? rawId
+            : int.tryParse(rawId?.toString() ?? '');
+        if (id != null) {
+          // Determine detected type from latest analysis if available
+          String detectedType = '';
+          if (_analysisResult != null &&
+              _analysisResult!.detections.isNotEmpty) {
+            final first = _analysisResult!.detections.first;
+            detectedType = first.classNameVi.isNotEmpty
+                ? first.classNameVi
+                : (first.className.isNotEmpty ? first.className : '');
+          }
+
+          await _db.updateDefect(id, {
+            'time': DateTime.now().toIso8601String(),
+            'type': detectedType,
+            'judgement': result,
+          });
+
+          // Update in-memory and reload from DB
+          setState(() {
+            current['type'] = detectedType;
+            current['judgement'] = result;
+            current['time'] = DateTime.now().toIso8601String();
+            _defectListReloadToken++;
+          });
+
+          // Reload list from DB so DefectListWidget shows persisted data
+          await _loadDefectsForBoard(_currentBoardId);
+          // Reset local analysis/selection and return to live camera for next defect
+          if (!mounted) return;
+          setState(() {
+            _pendingJudgement = null;
+            _analysisResult = null;
+            _hasAnalysisResult = false;
+          });
+          final webSocketService = Provider.of<AutoVRSWebSocketService>(
+            context,
+            listen: false,
+          );
+          webSocketService.returnToLiveCamera();
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to persist judgment: $e');
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text('Lỗi lưu phán định: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -1360,7 +1454,6 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
               ],
             ),
 
-            // Hiển thị lỗi theo loại (tóm tắt)
             const SizedBox(height: 4),
             ..._buildLocalDefectTypeRows(local),
           ] else if (analysis != null) ...[
@@ -1379,7 +1472,6 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
               ],
             ),
 
-            // Hiển thị lỗi theo loại
             if (analysis['defects_by_type'] != null) ...[
               const SizedBox(height: 4),
               ...((analysis['defects_by_type'] as Map<String, dynamic>).entries
@@ -1400,7 +1492,6 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                   .toList()),
             ],
 
-            // Cảnh báo lỗi nghiêm trọng
             if (analysis['has_critical_defects'] == true) ...[
               const SizedBox(height: 8),
               Container(

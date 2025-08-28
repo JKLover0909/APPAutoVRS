@@ -18,6 +18,7 @@ class _SelectModelScreenState extends State<SelectModelScreen> {
   List<Map<String, dynamic>> _models = [];
   List<Map<String, dynamic>> _filteredModels = [];
   bool _isLoading = true;
+  String? _selectedModelId; // Track the currently selected model
 
   @override
   void initState() {
@@ -30,9 +31,15 @@ class _SelectModelScreenState extends State<SelectModelScreen> {
     try {
       final dbService = LocalDatabaseService();
       final models = await dbService.getAllModels();
+
+      // Get current model from provider to highlight it
+      final vrsProvider = Provider.of<VRSProvider>(context, listen: false);
+      final currentModelId = vrsProvider.currentModel;
+
       setState(() {
         _models = models;
         _filteredModels = models;
+        _selectedModelId = currentModelId;
         _isLoading = false;
       });
     } catch (e) {
@@ -184,7 +191,15 @@ class _SelectModelScreenState extends State<SelectModelScreen> {
                   DataCell(
                     Text(
                       model['id_model']?.toString() ?? 'Unknown',
-                      style: const TextStyle(fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        fontWeight:
+                            model['id_model']?.toString() == _selectedModelId
+                            ? FontWeight.bold
+                            : FontWeight.w500,
+                        color: model['id_model']?.toString() == _selectedModelId
+                            ? Colors.blue
+                            : Colors.black,
+                      ),
                     ),
                   ),
                   DataCell(Text(model['line_size']?.toString() ?? 'N/A')),
@@ -194,16 +209,27 @@ class _SelectModelScreenState extends State<SelectModelScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         ElevatedButton(
-                          onPressed: () => _selectModel(model),
+                          onPressed:
+                              model['id_model']?.toString() == _selectedModelId
+                              ? null
+                              : () => _selectModel(model),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green.shade500,
+                            backgroundColor:
+                                model['id_model']?.toString() ==
+                                    _selectedModelId
+                                ? Colors.grey.shade400
+                                : Colors.green.shade500,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
                               vertical: 8,
                             ),
                           ),
-                          child: const Text('Chọn'),
+                          child: Text(
+                            model['id_model']?.toString() == _selectedModelId
+                                ? 'Đang chọn'
+                                : 'Chọn',
+                          ),
                         ),
                         const SizedBox(width: 8),
                         IconButton(
@@ -254,6 +280,11 @@ class _SelectModelScreenState extends State<SelectModelScreen> {
       final router = GoRouter.of(context);
 
       await vrsProvider.setCurrentModel(model['id_model'].toString());
+
+      // Update selected model ID for UI highlighting
+      setState(() {
+        _selectedModelId = model['id_model'].toString();
+      });
 
       // Hiển thị SnackBar **trước khi pop màn hình** using global messenger
       final snackBar = SnackBar(
