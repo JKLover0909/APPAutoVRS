@@ -166,6 +166,9 @@ class _SelectModelScreenState extends State<SelectModelScreen> {
             ),
           ),
           DataColumn(
+            label: Text('Tên', style: TextStyle(fontWeight: FontWeight.w600)),
+          ),
+          DataColumn(
             label: Text(
               'Kích thước Line',
               style: TextStyle(fontWeight: FontWeight.w600),
@@ -202,6 +205,7 @@ class _SelectModelScreenState extends State<SelectModelScreen> {
                       ),
                     ),
                   ),
+                  DataCell(Text(model['name']?.toString() ?? 'N/A')),
                   DataCell(Text(model['line_size']?.toString() ?? 'N/A')),
                   DataCell(Text(model['space_size']?.toString() ?? 'N/A')),
                   DataCell(

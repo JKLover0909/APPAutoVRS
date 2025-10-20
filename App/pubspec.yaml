@@ -51,7 +51,6 @@ dependencies:
   
   # WebSocket for real-time communication
   web_socket_channel: ^2.4.0
-  image: ^4.2.0
   
   # Camera functionality
   camera: ^0.10.6

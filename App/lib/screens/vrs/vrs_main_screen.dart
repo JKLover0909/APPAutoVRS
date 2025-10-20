@@ -9,10 +9,12 @@ import '../../providers/vrs_provider.dart';
 // import '../../services/autovrs_websocket_service.dart';
 import 'manual_vrs_screen.dart';
 import '../../widgets/defect_list_widget.dart';
+import '../../widgets/gerber_image_widget.dart';
 import '../../services/local_database_service.dart';
 import '../../services/coord_ws_client.dart';
 import '../../services/ai_detection_service.dart';
 import '../../services/autovrs_websocket_service.dart';
+import '../../services/qcamber_gerber_service.dart';
 
 // Map technical defect names to display names (same logic as ManualVRSScreen)
 String _getDefectDisplayName(String technicalName) {
@@ -54,10 +56,15 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
   String? _lastPersistedVerdict;
   String? _lastPersistedType;
 
+  // Gerber service for displaying PCB design images
+  late QCamberGerberService _gerberService;
+  bool _isLoadingGerber = false;
+
   @override
   void initState() {
     super.initState();
     _coordClient.onMessage = _handleWsMessage;
+    _gerberService = context.read<QCamberGerberService>();
   }
 
   @override
@@ -681,44 +688,9 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
                                     ),
                                     const SizedBox(height: 8),
                                     Expanded(
-                                      child: LayoutBuilder(
-                                        builder: (context, constraints) {
-                                          final availableWidth =
-                                              constraints.maxWidth;
-                                          final availableHeight =
-                                              constraints.maxHeight;
-                                          final squareSize =
-                                              availableWidth < availableHeight
-                                              ? availableWidth
-                                              : availableHeight;
-
-                                          return Center(
-                                            child: SizedBox(
-                                              width: squareSize,
-                                              height: squareSize,
-                                              child: Container(
-                                                decoration: BoxDecoration(
-                                                  color: Colors.grey.shade700,
-                                                  borderRadius:
-                                                      BorderRadius.circular(6),
-                                                ),
-                                                child: Stack(
-                                                  children: [
-                                                    const Center(
-                                                      child: Text(
-                                                        'Gerber View',
-                                                        style: TextStyle(
-                                                          color: Colors.white,
-                                                          fontSize: 12,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        },
+                                      child: GerberImageWidget(
+                                        isLoading: _isLoadingGerber,
+                                        errorMessage: _gerberService.lastError,
                                       ),
                                     ),
                                   ],

@@ -6,9 +6,11 @@ import 'package:provider/provider.dart';
 import '../../services/autovrs_websocket_service.dart';
 import '../../services/video_frame_service.dart';
 import '../../services/ai_detection_service.dart';
+import '../../services/qcamber_gerber_service.dart';
 import '../../providers/vrs_provider.dart';
 import '../../main.dart';
 import '../../widgets/defect_list_widget.dart';
+import '../../widgets/gerber_image_widget.dart';
 import '../../services/local_database_service.dart';
 
 class ManualVRSScreen extends StatefulWidget {
@@ -30,6 +32,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
   // Streamlined state management for capture + AI detection
   late AIDetectionService _aiDetectionService;
   late VideoFrameService _videoFrameService;
+  late QCamberGerberService _gerberService;
   final int _selectedVideoSource = 0; // 0: AutoVRS, 1: Video Stream
 
   // Capture state management
@@ -38,7 +41,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
   AIDetectionResult? _analysisResult;
   String?
   _pendingJudgement; // 'OK' or 'NG' when user selects but not yet confirmed
-  // Uint8List? _capturedFrame; // Removed unused field
+  bool _isLoadingGerber = false;
 
   @override
   void initState() {
@@ -47,6 +50,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
     // Initialize AI Detection Service
     _aiDetectionService = AIDetectionService();
     _videoFrameService = VideoFrameService();
+    _gerberService = context.read<QCamberGerberService>();
 
     // Kết nối AutoVRS WebSocket khi khởi tạo màn hình
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -56,6 +60,11 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
         listen: false,
       );
       _connectToBackend(webSocketService);
+
+      // Auto load Gerber for first defect if available
+      if (_defects.isNotEmpty) {
+        _loadGerberForCurrentDefect();
+      }
     });
   }
 
@@ -79,6 +88,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
         _defects = [];
         _currentDefectIndex = 0;
       });
+      _gerberService.clearImage();
       return;
     }
 
@@ -88,6 +98,11 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
       _defects = list;
       _currentDefectIndex = (_defects.isNotEmpty) ? 0 : 0;
     });
+
+    // Auto-load Gerber for first defect
+    if (_defects.isNotEmpty) {
+      _loadGerberForCurrentDefect();
+    }
   }
 
   Future<void> _connectToBackend(
@@ -737,50 +752,10 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                           ),
                                           const SizedBox(height: 8),
                                           Expanded(
-                                            child: LayoutBuilder(
-                                              builder: (context, constraints) {
-                                                final availableWidth =
-                                                    constraints.maxWidth;
-                                                final availableHeight =
-                                                    constraints.maxHeight;
-                                                final squareSize =
-                                                    availableWidth <
-                                                        availableHeight
-                                                    ? availableWidth
-                                                    : availableHeight;
-
-                                                return Center(
-                                                  child: SizedBox(
-                                                    width: squareSize,
-                                                    height: squareSize,
-                                                    child: Container(
-                                                      decoration: BoxDecoration(
-                                                        color: Colors
-                                                            .grey
-                                                            .shade700,
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              6,
-                                                            ),
-                                                      ),
-                                                      child: Stack(
-                                                        children: [
-                                                          const Center(
-                                                            child: Text(
-                                                              'Gerber View',
-                                                              style: TextStyle(
-                                                                color: Colors
-                                                                    .white,
-                                                                fontSize: 12,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  ),
-                                                );
-                                              },
+                                            child: GerberImageWidget(
+                                              isLoading: _isLoadingGerber,
+                                              errorMessage:
+                                                  _gerberService.lastError,
                                             ),
                                           ),
                                         ],
@@ -1303,15 +1278,95 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
     );
   }
 
+  Future<void> _loadGerberForCurrentDefect() async {
+    if (_defects.isEmpty) {
+      _gerberService.clearImage();
+      return;
+    }
+
+    if (mounted) {
+      setState(() => _isLoadingGerber = true);
+    }
+
+    try {
+      // Get current defect
+      final defect = _defects[_currentDefectIndex];
+
+      // Get model name from database hierarchy: Board -> Lot -> Model
+      final boardId =
+          int.tryParse(
+            Provider.of<VRSProvider>(context, listen: false).currentBoard,
+          ) ??
+          0;
+
+      final board = await _db.getBoardById(boardId);
+      if (board == null) throw Exception('Board not found');
+
+      final lotId = board['tbLotid_lot'];
+      final lot = await _db.getLotById(lotId);
+      if (lot == null) throw Exception('Lot not found');
+
+      final modelId = lot['tbModelid_model'];
+      final model = await _db.getModelById(modelId);
+      if (model == null) throw Exception('Model not found');
+
+      // Extract coordinates from defect
+      Map<String, dynamic> coordinates = {};
+      final coordinatesStr = defect['coordinates'] as String?;
+
+      if (coordinatesStr != null && coordinatesStr.isNotEmpty) {
+        try {
+          coordinates =
+              QCamberGerberService.parseCoordinatesString(coordinatesStr) ?? {};
+        } catch (e) {
+          debugPrint('Error parsing coordinates: $e');
+        }
+      }
+
+      // Request Gerber image from QCamber (Port 8686)
+      final success = await _gerberService.captureGerberImage(
+        modelName: model['name'] ?? 'Model_${model['id_model']}',
+        coordinates: coordinates,
+        defectType: defect['type'],
+        layerName: 'l2', // Fixed layer name
+        zoom: 128.0, // Fixed zoom level
+      );
+
+      if (success) {
+        debugPrint(
+          '✅ Gerber image loaded for defect ${_currentDefectIndex + 1}',
+        );
+      } else {
+        debugPrint('❌ Failed to load Gerber: ${_gerberService.lastError}');
+      }
+    } catch (e) {
+      debugPrint('Error loading Gerber: $e');
+      if (mounted) {
+        scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text('Lỗi tải ảnh Gerber: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingGerber = false);
+      }
+    }
+  }
+
   void _previousDefect() {
     if (_defects.isNotEmpty && _currentDefectIndex > 0) {
       setState(() => _currentDefectIndex--);
+      _loadGerberForCurrentDefect();
     }
   }
 
   void _nextDefect() {
     if (_defects.isNotEmpty && _currentDefectIndex < _defects.length - 1) {
       setState(() => _currentDefectIndex++);
+      _loadGerberForCurrentDefect();
     }
   }
 

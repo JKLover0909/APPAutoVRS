@@ -111,6 +111,7 @@ class LocalDatabaseService {
     await db.execute('''
       CREATE TABLE tbModel (
         id_model INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
         line_size REAL,
         space_size REAL,
         url_gerber TEXT

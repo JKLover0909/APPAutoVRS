@@ -14,6 +14,7 @@ class AddModelScreen extends StatefulWidget {
 class _AddModelScreenState extends State<AddModelScreen> {
   final _formKey = GlobalKey<FormState>();
   final _modelIdController = TextEditingController();
+  final _modelNameController = TextEditingController();
   final _lineSizeController = TextEditingController();
   final _spaceSizeController = TextEditingController();
 
@@ -50,6 +51,23 @@ class _AddModelScreenState extends State<AddModelScreen> {
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'Vui lòng nhập mã hàng';
+                      }
+                      return null;
+                    },
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Model Name ✅ THÊM MỚI
+                  TextFormField(
+                    controller: _modelNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Tên mã hàng (name)',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Vui lòng nhập tên mã hàng';
                       }
                       return null;
                     },
@@ -242,8 +260,10 @@ class _AddModelScreenState extends State<AddModelScreen> {
 
     try {
       final dbService = LocalDatabaseService();
+      final modelName = _modelNameController.text.trim();
       final insertedId = await dbService.insertModel({
         'id_model': idModel,
+        'name': modelName,
         'line_size': lineSize,
         'space_size': spaceSize,
         'url_gerber': _selectedFile,
@@ -273,6 +293,7 @@ class _AddModelScreenState extends State<AddModelScreen> {
   @override
   void dispose() {
     _modelIdController.dispose();
+    _modelNameController.dispose();
     _lineSizeController.dispose();
     _spaceSizeController.dispose();
     super.dispose();
