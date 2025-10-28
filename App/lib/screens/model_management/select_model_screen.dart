@@ -28,6 +28,10 @@ class _SelectModelScreenState extends State<SelectModelScreen> {
   }
 
   Future<void> _loadModels() async {
+    setState(() {
+      _isLoading = true;
+    });
+
     try {
       final dbService = LocalDatabaseService();
       final models = await dbService.getAllModels();
@@ -82,14 +86,33 @@ class _SelectModelScreenState extends State<SelectModelScreen> {
                     'Chọn bộ tham số mã hàng',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
                   ),
-                  ElevatedButton.icon(
-                    onPressed: () => context.push('/add-model'),
-                    icon: const Icon(FeatherIcons.plus, size: 18),
-                    label: const Text('Thêm mã hàng mới'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue.shade600,
-                      foregroundColor: Colors.white,
-                    ),
+                  Row(
+                    children: [
+                      // ✅ Nút Refresh
+                      IconButton(
+                        onPressed: _isLoading ? null : _loadModels,
+                        icon: const Icon(FeatherIcons.refreshCw),
+                        tooltip: 'Làm mới danh sách',
+                        color: Colors.blue.shade600,
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          // ✅ Đợi quay lại từ màn hình Add Model
+                          await context.push('/add-model');
+                          // ✅ Refresh danh sách sau khi quay lại
+                          if (mounted) {
+                            _loadModels();
+                          }
+                        },
+                        icon: const Icon(FeatherIcons.plus, size: 18),
+                        label: const Text('Thêm mã hàng mới'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue.shade600,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -141,7 +164,14 @@ class _SelectModelScreenState extends State<SelectModelScreen> {
           ),
           const SizedBox(height: 24),
           ElevatedButton.icon(
-            onPressed: () => context.push('/add-model'),
+            onPressed: () async {
+              // ✅ Đợi quay lại từ màn hình Add Model
+              await context.push('/add-model');
+              // ✅ Refresh danh sách sau khi quay lại
+              if (mounted) {
+                _loadModels();
+              }
+            },
             icon: const Icon(FeatherIcons.plus, size: 18),
             label: const Text('Thêm mã hàng mới'),
             style: ElevatedButton.styleFrom(
