@@ -782,9 +782,10 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                         const Text(
                           'Giám sát VRS Auto',
                           style: TextStyle(
@@ -1046,6 +1047,7 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
                       ],
                     ),
                   ),
+                ),
                 ),
               ),
             ],

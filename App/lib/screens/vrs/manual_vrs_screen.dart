@@ -857,9 +857,10 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                         ),
                         child: Padding(
                           padding: const EdgeInsets.all(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
+                          child: SingleChildScrollView(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                               const Text(
                                 'Phán định thủ công',
                                 style: TextStyle(
@@ -1245,6 +1246,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                           ),
                         ),
                       ),
+                    ),
                     ),
                   ],
                 ),
