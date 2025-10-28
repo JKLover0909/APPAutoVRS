@@ -786,88 +786,66 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                        const Text(
-                          'Giám sát VRS Auto',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
+                          const Text(
+                            'Giám sát VRS Auto',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        ),
 
-                        const Divider(height: 24),
+                          const Divider(height: 24),
 
-                        // Info rows (dynamic from providers)
-                        _buildInfoRow('Mã Lô (id_lot):', lotText),
-                        const SizedBox(height: 12),
-                        _buildInfoRow('Số thứ tự bo:', boardText),
-                        const SizedBox(height: 12),
-                        _buildInfoRow('Loại lỗi AI dự đoán:', aiText),
-                        const SizedBox(height: 12),
-                        // Total defects for current board
-                        FutureBuilder<List<Map<String, dynamic>>>(
-                          future: (int.tryParse(boardText) != null)
-                              ? LocalDatabaseService().getDefectsByBoard(
-                                  int.parse(boardText),
-                                )
-                              : Future.value([]),
-                          builder: (context, snap) {
-                            final total = snap.hasData ? snap.data!.length : 0;
-                            return _buildInfoRow(
-                              'Số lỗi trên bo:',
-                              total.toString(),
-                            );
-                          },
-                        ),
+                          // Info rows (dynamic from providers)
+                          _buildInfoRow('Mã Lô (id_lot):', lotText),
+                          const SizedBox(height: 12),
+                          _buildInfoRow('Số thứ tự bo:', boardText),
+                          const SizedBox(height: 12),
+                          _buildInfoRow('Loại lỗi AI dự đoán:', aiText),
+                          const SizedBox(height: 12),
+                          // Total defects for current board
+                          FutureBuilder<List<Map<String, dynamic>>>(
+                            future: (int.tryParse(boardText) != null)
+                                ? LocalDatabaseService().getDefectsByBoard(
+                                    int.parse(boardText),
+                                  )
+                                : Future.value([]),
+                            builder: (context, snap) {
+                              final total = snap.hasData
+                                  ? snap.data!.length
+                                  : 0;
+                              return _buildInfoRow(
+                                'Số lỗi trên bo:',
+                                total.toString(),
+                              );
+                            },
+                          ),
 
-                        const SizedBox(height: 24),
+                          const SizedBox(height: 24),
 
-                        // AI Result
-                        const Text(
-                          'Kết quả phán định AI',
-                          style: TextStyle(fontSize: 14, color: Colors.grey),
-                          textAlign: TextAlign.center,
-                        ),
+                          // AI Result
+                          const Text(
+                            'Kết quả phán định AI',
+                            style: TextStyle(fontSize: 14, color: Colors.grey),
+                            textAlign: TextAlign.center,
+                          ),
 
-                        const SizedBox(height: 12),
+                          const SizedBox(height: 12),
 
-                        // Dynamic AI Result Panel - shows OK (green) or NG (red)
-                        Builder(
-                          builder: (context) {
-                            String verdictShort = 'OK';
-                            Color bgColor = Colors.green.shade50;
-                            Color txtColor = Colors.green.shade600;
-                            String detailText = aiText;
+                          // Dynamic AI Result Panel - shows OK (green) or NG (red)
+                          Builder(
+                            builder: (context) {
+                              String verdictShort = 'OK';
+                              Color bgColor = Colors.green.shade50;
+                              Color txtColor = Colors.green.shade600;
+                              String detailText = aiText;
 
-                            // Prefer the last persisted verdict/type when available.
-                            // This ensures the result card shows the most recent
-                            // persisted AI decision even if _currentIndex has moved on.
-                            if (_lastPersistedVerdict != null) {
-                              verdictShort = _lastPersistedVerdict!
-                                  .toUpperCase();
-                              if (verdictShort == 'OK') {
-                                bgColor = Colors.green.shade50;
-                                txtColor = Colors.green.shade600;
-                                detailText = 'Không phát hiện lỗi';
-                              } else {
-                                bgColor = Colors.red.shade50;
-                                txtColor = Colors.red.shade600;
-                                if (_lastPersistedType != null &&
-                                    _lastPersistedType!.isNotEmpty) {
-                                  detailText = _getDefectDisplayName(
-                                    _lastPersistedType!,
-                                  );
-                                } else {
-                                  detailText = aiText;
-                                }
-                              }
-                            } else if (_defects.isNotEmpty &&
-                                _currentIndex < _defects.length) {
-                              final cur = _defects[_currentIndex];
-                              final j = cur['judgement']
-                                  ?.toString()
-                                  .toUpperCase();
-                              if (j != null && j.isNotEmpty) {
-                                verdictShort = j;
+                              // Prefer the last persisted verdict/type when available.
+                              // This ensures the result card shows the most recent
+                              // persisted AI decision even if _currentIndex has moved on.
+                              if (_lastPersistedVerdict != null) {
+                                verdictShort = _lastPersistedVerdict!
+                                    .toUpperCase();
                                 if (verdictShort == 'OK') {
                                   bgColor = Colors.green.shade50;
                                   txtColor = Colors.green.shade600;
@@ -875,17 +853,61 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
                                 } else {
                                   bgColor = Colors.red.shade50;
                                   txtColor = Colors.red.shade600;
-                                  // show detected type if available
-                                  detailText =
-                                      (cur['type'] != null &&
-                                          cur['type'].toString().isNotEmpty)
-                                      ? _getDefectDisplayName(
-                                          cur['type'].toString(),
-                                        )
-                                      : aiText;
+                                  if (_lastPersistedType != null &&
+                                      _lastPersistedType!.isNotEmpty) {
+                                    detailText = _getDefectDisplayName(
+                                      _lastPersistedType!,
+                                    );
+                                  } else {
+                                    detailText = aiText;
+                                  }
+                                }
+                              } else if (_defects.isNotEmpty &&
+                                  _currentIndex < _defects.length) {
+                                final cur = _defects[_currentIndex];
+                                final j = cur['judgement']
+                                    ?.toString()
+                                    .toUpperCase();
+                                if (j != null && j.isNotEmpty) {
+                                  verdictShort = j;
+                                  if (verdictShort == 'OK') {
+                                    bgColor = Colors.green.shade50;
+                                    txtColor = Colors.green.shade600;
+                                    detailText = 'Không phát hiện lỗi';
+                                  } else {
+                                    bgColor = Colors.red.shade50;
+                                    txtColor = Colors.red.shade600;
+                                    // show detected type if available
+                                    detailText =
+                                        (cur['type'] != null &&
+                                            cur['type'].toString().isNotEmpty)
+                                        ? _getDefectDisplayName(
+                                            cur['type'].toString(),
+                                          )
+                                        : aiText;
+                                  }
+                                } else {
+                                  // no persisted judgement yet - fallback to lastAnalysis
+                                  if (analysis != null) {
+                                    final hasDefects =
+                                        (analysis['total_defects'] ?? 0) > 0 ||
+                                        (analysis['defects_by_type'] is Map &&
+                                            (analysis['defects_by_type'] as Map)
+                                                .keys
+                                                .isNotEmpty);
+                                    if (hasDefects) {
+                                      verdictShort = 'NG';
+                                      bgColor = Colors.red.shade50;
+                                      txtColor = Colors.red.shade600;
+                                    } else {
+                                      verdictShort = 'OK';
+                                      bgColor = Colors.green.shade50;
+                                      txtColor = Colors.green.shade600;
+                                    }
+                                  }
                                 }
                               } else {
-                                // no persisted judgement yet - fallback to lastAnalysis
+                                // no defect in memory - use analysis
                                 if (analysis != null) {
                                   final hasDefects =
                                       (analysis['total_defects'] ?? 0) > 0 ||
@@ -904,150 +926,131 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
                                   }
                                 }
                               }
-                            } else {
-                              // no defect in memory - use analysis
-                              if (analysis != null) {
-                                final hasDefects =
-                                    (analysis['total_defects'] ?? 0) > 0 ||
-                                    (analysis['defects_by_type'] is Map &&
-                                        (analysis['defects_by_type'] as Map)
-                                            .keys
-                                            .isNotEmpty);
-                                if (hasDefects) {
-                                  verdictShort = 'NG';
-                                  bgColor = Colors.red.shade50;
-                                  txtColor = Colors.red.shade600;
-                                } else {
-                                  verdictShort = 'OK';
-                                  bgColor = Colors.green.shade50;
-                                  txtColor = Colors.green.shade600;
-                                }
-                              }
-                            }
 
-                            return Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                color: bgColor,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Column(
-                                children: [
-                                  Text(
-                                    verdictShort,
-                                    style: TextStyle(
-                                      fontSize: 32,
-                                      fontWeight: FontWeight.bold,
-                                      color: txtColor,
+                              return Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: bgColor,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      verdictShort,
+                                      style: TextStyle(
+                                        fontSize: 32,
+                                        fontWeight: FontWeight.bold,
+                                        color: txtColor,
+                                      ),
+                                      textAlign: TextAlign.center,
                                     ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    detailText,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: txtColor.withOpacity(0.9),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      detailText,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: txtColor.withOpacity(0.9),
+                                      ),
+                                      textAlign: TextAlign.center,
                                     ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-
-                        const SizedBox(height: 16),
-
-                        // Defect list for currently selected board
-                        DefectListWidget(
-                          boardId: int.tryParse(boardText),
-                          height: 200,
-                          reloadToken: _defectListReloadToken,
-                        ),
-
-                        const SizedBox(height: 16),
-
-                        // Start / Stop operator-driven workflow
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: (boardText != 'Chưa có' && !_running)
-                                    ? () {
-                                        final bId = int.tryParse(boardText);
-                                        if (bId != null) _startWorkflow(bId);
-                                      }
-                                    : null,
-                                child: const Text('Bắt đầu'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
+                                  ],
                                 ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: _running ? _stopWorkflow : null,
-                                child: const Text('Dừng'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                              );
+                            },
+                          ),
 
-                        const SizedBox(height: 16),
+                          const SizedBox(height: 16),
 
-                        // Statistics Button
-                        Consumer<AuthProvider>(
-                          builder: (context, authProvider, _) {
-                            return SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                onPressed: authProvider.isAdminAuthenticated
-                                    ? () => context.push('/statistics')
-                                    : null,
-                                icon: const Icon(FeatherIcons.barChart),
-                                label: const Text('Xem thống kê'),
-                                style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
+                          // Defect list for currently selected board
+                          DefectListWidget(
+                            boardId: int.tryParse(boardText),
+                            height: 200,
+                            reloadToken: _defectListReloadToken,
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // Start / Stop operator-driven workflow
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed:
+                                      (boardText != 'Chưa có' && !_running)
+                                      ? () {
+                                          final bId = int.tryParse(boardText);
+                                          if (bId != null) _startWorkflow(bId);
+                                        }
+                                      : null,
+                                  child: const Text('Bắt đầu'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
                                   ),
                                 ),
                               ),
-                            );
-                          },
-                        ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: _running ? _stopWorkflow : null,
+                                  child: const Text('Dừng'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
 
-                        const SizedBox(height: 16),
+                          const SizedBox(height: 16),
 
-                        // // Manual review button
-                        // SizedBox(
-                        //   width: double.infinity,
-                        //   child: ElevatedButton.icon(
-                        //     onPressed: () {
-                        //       Navigator.of(context).push(
-                        //         MaterialPageRoute(
-                        //           builder: (context) => ManualVRSScreen(),
-                        //         ),
-                        //       );
-                        //     },
-                        //     icon: const Icon(FeatherIcons.edit3),
-                        //     label: const Text('Phán định thủ công'),
-                        //     style: ElevatedButton.styleFrom(
-                        //       backgroundColor: Colors.orange,
-                        //       foregroundColor: Colors.white,
-                        //       padding: const EdgeInsets.symmetric(vertical: 12),
-                        //     ),
-                        //   ),
-                        // ),
-                      ],
+                          // Statistics Button
+                          Consumer<AuthProvider>(
+                            builder: (context, authProvider, _) {
+                              return SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: authProvider.isAdminAuthenticated
+                                      ? () => context.push('/statistics')
+                                      : null,
+                                  icon: const Icon(FeatherIcons.barChart),
+                                  label: const Text('Xem thống kê'),
+                                  style: ElevatedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // // Manual review button
+                          // SizedBox(
+                          //   width: double.infinity,
+                          //   child: ElevatedButton.icon(
+                          //     onPressed: () {
+                          //       Navigator.of(context).push(
+                          //         MaterialPageRoute(
+                          //           builder: (context) => ManualVRSScreen(),
+                          //         ),
+                          //       );
+                          //     },
+                          //     icon: const Icon(FeatherIcons.edit3),
+                          //     label: const Text('Phán định thủ công'),
+                          //     style: ElevatedButton.styleFrom(
+                          //       backgroundColor: Colors.orange,
+                          //       foregroundColor: Colors.white,
+                          //       padding: const EdgeInsets.symmetric(vertical: 12),
+                          //     ),
+                          //   ),
+                          // ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
                 ),
               ),
             ],

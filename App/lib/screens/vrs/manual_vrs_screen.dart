@@ -861,189 +861,149 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                              const Text(
-                                'Phán định thủ công',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
+                                const Text(
+                                  'Phán định thủ công',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
-                              ),
-                              const Divider(height: 24),
-                              // Info rows
-                              _buildInfoRow(
-                                'Mã Lô:',
-                                vrsProvider.currentLot != null &&
-                                        vrsProvider.currentLot!.isNotEmpty
-                                    ? vrsProvider.currentLot!
-                                    : 'Chưa có',
-                              ),
-                              const SizedBox(height: 12),
-                              _buildInfoRow(
-                                'Số thứ tự bo (Id_board):',
-                                vrsProvider.currentBoard != null &&
-                                        vrsProvider.currentBoard!.isNotEmpty
-                                    ? vrsProvider.currentBoard!
-                                    : 'Chưa có',
-                              ),
-                              const SizedBox(height: 12),
-                              _buildInfoRow(
-                                'Loại lỗi AI dự đoán:',
-                                _getAIPredictionText(),
-                              ),
+                                const Divider(height: 24),
+                                // Info rows
+                                _buildInfoRow(
+                                  'Mã Lô:',
+                                  vrsProvider.currentLot != null &&
+                                          vrsProvider.currentLot!.isNotEmpty
+                                      ? vrsProvider.currentLot!
+                                      : 'Chưa có',
+                                ),
+                                const SizedBox(height: 12),
+                                _buildInfoRow(
+                                  'Số thứ tự bo (Id_board):',
+                                  vrsProvider.currentBoard != null &&
+                                          vrsProvider.currentBoard!.isNotEmpty
+                                      ? vrsProvider.currentBoard!
+                                      : 'Chưa có',
+                                ),
+                                const SizedBox(height: 12),
+                                _buildInfoRow(
+                                  'Loại lỗi AI dự đoán:',
+                                  _getAIPredictionText(),
+                                ),
 
-                              const SizedBox(height: 16),
+                                const SizedBox(height: 16),
 
-                              // Defect list for current board
-                              DefectListWidget(
-                                boardId: int.tryParse(vrsProvider.currentBoard),
-                                height: 220,
-                                reloadToken: _defectListReloadToken,
-                              ),
-
-                              const SizedBox(height: 12),
-
-                              // Magnification Slider
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      const Text(
-                                        'Độ phóng đại',
-                                        style: TextStyle(fontSize: 14),
-                                      ),
-                                      Row(
-                                        children: [
-                                          Text(
-                                            '${_magnification.round()}%',
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          // Reset zoom button
-                                          InkWell(
-                                            onTap: () {
-                                              setState(() {
-                                                _magnification = 100;
-                                              });
-                                              debugPrint(
-                                                '🔍 Zoom reset to 100%',
-                                              );
-                                            },
-                                            child: Container(
-                                              padding: const EdgeInsets.all(4),
-                                              decoration: BoxDecoration(
-                                                color: Colors.grey.withOpacity(
-                                                  0.2,
-                                                ),
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                              ),
-                                              child: const Icon(
-                                                Icons.center_focus_strong,
-                                                size: 16,
-                                                color: Colors.grey,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
+                                // Defect list for current board
+                                DefectListWidget(
+                                  boardId: int.tryParse(
+                                    vrsProvider.currentBoard,
                                   ),
-                                  const SizedBox(height: 8),
-                                  SliderTheme(
-                                    data: SliderTheme.of(context).copyWith(
-                                      activeTrackColor: Colors.blue,
-                                      inactiveTrackColor: Colors.grey
-                                          .withOpacity(0.3),
-                                      thumbColor: Colors.blue,
-                                      overlayColor: Colors.blue.withOpacity(
-                                        0.2,
-                                      ),
-                                      trackHeight: 4,
-                                    ),
-                                    child: Slider(
-                                      value: _magnification,
-                                      min: 50,
-                                      max: 300,
-                                      divisions: 50,
-                                      label: '${_magnification.round()}%',
-                                      onChanged: (value) {
-                                        setState(() => _magnification = value);
-                                        debugPrint(
-                                          '🔍 Zoom level changed to: ${_magnification.round()}%',
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                  height: 220,
+                                  reloadToken: _defectListReloadToken,
+                                ),
 
-                              const SizedBox(height: 24),
+                                const SizedBox(height: 12),
 
-                              // Camera Settings
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      onPressed: () {
-                                        context.push('/vrs/light-adjust');
-                                      },
-                                      icon: const Icon(
-                                        FeatherIcons.settings,
-                                        size: 16,
-                                      ),
-                                      label: const Text('Điều chỉnh đèn'),
-                                      style: ElevatedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 12,
+                                // Magnification Slider
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        const Text(
+                                          'Độ phóng đại',
+                                          style: TextStyle(fontSize: 14),
                                         ),
+                                        Row(
+                                          children: [
+                                            Text(
+                                              '${_magnification.round()}%',
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            // Reset zoom button
+                                            InkWell(
+                                              onTap: () {
+                                                setState(() {
+                                                  _magnification = 100;
+                                                });
+                                                debugPrint(
+                                                  '🔍 Zoom reset to 100%',
+                                                );
+                                              },
+                                              child: Container(
+                                                padding: const EdgeInsets.all(
+                                                  4,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey
+                                                      .withOpacity(0.2),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                ),
+                                                child: const Icon(
+                                                  Icons.center_focus_strong,
+                                                  size: 16,
+                                                  color: Colors.grey,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    SliderTheme(
+                                      data: SliderTheme.of(context).copyWith(
+                                        activeTrackColor: Colors.blue,
+                                        inactiveTrackColor: Colors.grey
+                                            .withOpacity(0.3),
+                                        thumbColor: Colors.blue,
+                                        overlayColor: Colors.blue.withOpacity(
+                                          0.2,
+                                        ),
+                                        trackHeight: 4,
+                                      ),
+                                      child: Slider(
+                                        value: _magnification,
+                                        min: 50,
+                                        max: 300,
+                                        divisions: 50,
+                                        label: '${_magnification.round()}%',
+                                        onChanged: (value) {
+                                          setState(
+                                            () => _magnification = value,
+                                          );
+                                          debugPrint(
+                                            '🔍 Zoom level changed to: ${_magnification.round()}%',
+                                          );
+                                        },
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
+                                  ],
+                                ),
 
-                              const SizedBox(height: 16),
+                                const SizedBox(height: 24),
 
-                              // Capture and Analyze Button (hidden when analysis result exists or when viewing captured image)
-                              if (!_hasAnalysisResult &&
-                                  !webSocketService.isViewingCapturedImage) ...[
+                                // Camera Settings
                                 Row(
                                   children: [
                                     Expanded(
                                       child: ElevatedButton.icon(
-                                        onPressed: _isAnalyzing
-                                            ? null
-                                            : _captureAndAnalyze,
-                                        icon: _isAnalyzing
-                                            ? const SizedBox(
-                                                width: 16,
-                                                height: 16,
-                                                child: CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                  valueColor:
-                                                      AlwaysStoppedAnimation<
-                                                        Color
-                                                      >(Colors.white),
-                                                ),
-                                              )
-                                            : const Icon(
-                                                FeatherIcons.camera,
-                                                size: 16,
-                                              ),
-                                        label: Text(
-                                          _isAnalyzing
-                                              ? 'Đang phân tích...'
-                                              : 'Chụp lại',
+                                        onPressed: () {
+                                          context.push('/vrs/light-adjust');
+                                        },
+                                        icon: const Icon(
+                                          FeatherIcons.settings,
+                                          size: 16,
                                         ),
+                                        label: const Text('Điều chỉnh đèn'),
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.blue,
-                                          foregroundColor: Colors.white,
                                           padding: const EdgeInsets.symmetric(
                                             vertical: 12,
                                           ),
@@ -1052,201 +1012,259 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                     ),
                                   ],
                                 ),
-                              ],
 
-                              const SizedBox(height: 16),
+                                const SizedBox(height: 16),
 
-                              // Return to Live Camera Button - chỉ hiển thị khi đang xem ảnh đã chụp
-                              Consumer<AutoVRSWebSocketService>(
-                                builder: (context, webSocketService, child) {
-                                  if (webSocketService.isViewingCapturedImage) {
-                                    return Column(
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: ElevatedButton.icon(
-                                                onPressed: () {
-                                                  // Reset về trạng thái ban đầu
-                                                  setState(() {
-                                                    _hasAnalysisResult = false;
-                                                    _analysisResult = null;
-                                                  });
-
-                                                  // Quay lại live camera
-                                                  webSocketService
-                                                      .returnToLiveCamera();
-                                                },
-                                                icon: const Icon(
-                                                  FeatherIcons.video,
-                                                  size: 16,
-                                                ),
-                                                label: const Text(
-                                                  'Quay lại Live Camera',
-                                                ),
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor:
-                                                      Colors.orange,
-                                                  foregroundColor: Colors.white,
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        vertical: 12,
-                                                      ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 12),
-                                        // (Removed) defect detection summary card to reduce UI clutter
-                                        const SizedBox.shrink(),
-                                        const SizedBox(height: 16),
-                                      ],
-                                    );
-                                  }
-                                  return const SizedBox.shrink();
-                                },
-                              ),
-
-                              // Manual review: select OK/NG first, then confirm
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
+                                // Capture and Analyze Button (hidden when analysis result exists or when viewing captured image)
+                                if (!_hasAnalysisResult &&
+                                    !webSocketService
+                                        .isViewingCapturedImage) ...[
                                   Row(
                                     children: [
                                       Expanded(
-                                        child: ElevatedButton(
-                                          onPressed:
-                                              (!_hasAnalysisResult ||
-                                                  (_pendingJudgement != null &&
-                                                      _pendingJudgement !=
-                                                          'OK'))
+                                        child: ElevatedButton.icon(
+                                          onPressed: _isAnalyzing
                                               ? null
-                                              : () {
-                                                  setState(() {
-                                                    // select OK, deselect NG
-                                                    if (_pendingJudgement ==
-                                                        'OK') {
-                                                      _pendingJudgement = null;
-                                                    } else {
-                                                      _pendingJudgement = 'OK';
-                                                    }
-                                                  });
-                                                },
+                                              : _captureAndAnalyze,
+                                          icon: _isAnalyzing
+                                              ? const SizedBox(
+                                                  width: 16,
+                                                  height: 16,
+                                                  child: CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    valueColor:
+                                                        AlwaysStoppedAnimation<
+                                                          Color
+                                                        >(Colors.white),
+                                                  ),
+                                                )
+                                              : const Icon(
+                                                  FeatherIcons.camera,
+                                                  size: 16,
+                                                ),
+                                          label: Text(
+                                            _isAnalyzing
+                                                ? 'Đang phân tích...'
+                                                : 'Chụp lại',
+                                          ),
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor:
-                                                _pendingJudgement == 'OK'
-                                                ? Colors.green
-                                                : Colors.green.shade600,
+                                            backgroundColor: Colors.blue,
                                             foregroundColor: Colors.white,
                                             padding: const EdgeInsets.symmetric(
-                                              vertical: 16,
-                                            ),
-                                          ),
-                                          child: const Text(
-                                            'OK',
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: ElevatedButton(
-                                          onPressed:
-                                              (!_hasAnalysisResult ||
-                                                  (_pendingJudgement != null &&
-                                                      _pendingJudgement !=
-                                                          'NG'))
-                                              ? null
-                                              : () {
-                                                  setState(() {
-                                                    if (_pendingJudgement ==
-                                                        'NG') {
-                                                      _pendingJudgement = null;
-                                                    } else {
-                                                      _pendingJudgement = 'NG';
-                                                    }
-                                                  });
-                                                },
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor:
-                                                _pendingJudgement == 'NG'
-                                                ? Colors.red
-                                                : Colors.red.shade600,
-                                            foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 16,
-                                            ),
-                                          ),
-                                          child: const Text(
-                                            'NG',
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w600,
+                                              vertical: 12,
                                             ),
                                           ),
                                         ),
                                       ),
                                     ],
                                   ),
+                                ],
 
-                                  const SizedBox(height: 12),
+                                const SizedBox(height: 16),
 
-                                  // Confirm button: only enabled after user selects OK/NG
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: ElevatedButton.icon(
-                                      onPressed:
-                                          (_pendingJudgement != null &&
-                                              _hasAnalysisResult &&
-                                              _defects.isNotEmpty)
-                                          ? () => _makeJudgment(
-                                              _pendingJudgement == 'OK',
-                                            )
-                                          : null,
-                                      icon: const Icon(FeatherIcons.check),
-                                      label: const Text(
-                                        'Xác nhận và chuyển lỗi',
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 12,
+                                // Return to Live Camera Button - chỉ hiển thị khi đang xem ảnh đã chụp
+                                Consumer<AutoVRSWebSocketService>(
+                                  builder: (context, webSocketService, child) {
+                                    if (webSocketService
+                                        .isViewingCapturedImage) {
+                                      return Column(
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: ElevatedButton.icon(
+                                                  onPressed: () {
+                                                    // Reset về trạng thái ban đầu
+                                                    setState(() {
+                                                      _hasAnalysisResult =
+                                                          false;
+                                                      _analysisResult = null;
+                                                    });
+
+                                                    // Quay lại live camera
+                                                    webSocketService
+                                                        .returnToLiveCamera();
+                                                  },
+                                                  icon: const Icon(
+                                                    FeatherIcons.video,
+                                                    size: 16,
+                                                  ),
+                                                  label: const Text(
+                                                    'Quay lại Live Camera',
+                                                  ),
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor:
+                                                        Colors.orange,
+                                                    foregroundColor:
+                                                        Colors.white,
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          vertical: 12,
+                                                        ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 12),
+                                          // (Removed) defect detection summary card to reduce UI clutter
+                                          const SizedBox.shrink(),
+                                          const SizedBox(height: 16),
+                                        ],
+                                      );
+                                    }
+                                    return const SizedBox.shrink();
+                                  },
+                                ),
+
+                                // Manual review: select OK/NG first, then confirm
+                                Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: ElevatedButton(
+                                            onPressed:
+                                                (!_hasAnalysisResult ||
+                                                    (_pendingJudgement !=
+                                                            null &&
+                                                        _pendingJudgement !=
+                                                            'OK'))
+                                                ? null
+                                                : () {
+                                                    setState(() {
+                                                      // select OK, deselect NG
+                                                      if (_pendingJudgement ==
+                                                          'OK') {
+                                                        _pendingJudgement =
+                                                            null;
+                                                      } else {
+                                                        _pendingJudgement =
+                                                            'OK';
+                                                      }
+                                                    });
+                                                  },
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor:
+                                                  _pendingJudgement == 'OK'
+                                                  ? Colors.green
+                                                  : Colors.green.shade600,
+                                              foregroundColor: Colors.white,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 16,
+                                                  ),
+                                            ),
+                                            child: const Text(
+                                              'OK',
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: ElevatedButton(
+                                            onPressed:
+                                                (!_hasAnalysisResult ||
+                                                    (_pendingJudgement !=
+                                                            null &&
+                                                        _pendingJudgement !=
+                                                            'NG'))
+                                                ? null
+                                                : () {
+                                                    setState(() {
+                                                      if (_pendingJudgement ==
+                                                          'NG') {
+                                                        _pendingJudgement =
+                                                            null;
+                                                      } else {
+                                                        _pendingJudgement =
+                                                            'NG';
+                                                      }
+                                                    });
+                                                  },
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor:
+                                                  _pendingJudgement == 'NG'
+                                                  ? Colors.red
+                                                  : Colors.red.shade600,
+                                              foregroundColor: Colors.white,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 16,
+                                                  ),
+                                            ),
+                                            child: const Text(
+                                              'NG',
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+
+                                    const SizedBox(height: 12),
+
+                                    // Confirm button: only enabled after user selects OK/NG
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton.icon(
+                                        onPressed:
+                                            (_pendingJudgement != null &&
+                                                _hasAnalysisResult &&
+                                                _defects.isNotEmpty)
+                                            ? () => _makeJudgment(
+                                                _pendingJudgement == 'OK',
+                                              )
+                                            : null,
+                                        icon: const Icon(FeatherIcons.check),
+                                        label: const Text(
+                                          'Xác nhận và chuyển lỗi',
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 12,
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
+                                  ],
+                                ),
 
-                              const SizedBox(height: 24),
+                                const SizedBox(height: 24),
 
-                              // Navigation for next board
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  onPressed:
-                                      _defects.isNotEmpty &&
-                                          _currentDefectIndex <
-                                              _defects.length - 1
-                                      ? _nextDefect
-                                      : null,
-                                  icon: const Icon(FeatherIcons.arrowRight),
-                                  label: const Text('Chuyển Bo'),
-                                  style: ElevatedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 12,
+                                // Navigation for next board
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton.icon(
+                                    onPressed:
+                                        _defects.isNotEmpty &&
+                                            _currentDefectIndex <
+                                                _defects.length - 1
+                                        ? _nextDefect
+                                        : null,
+                                    icon: const Icon(FeatherIcons.arrowRight),
+                                    label: const Text('Chuyển Bo'),
+                                    style: ElevatedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
                     ),
                   ],
                 ),
