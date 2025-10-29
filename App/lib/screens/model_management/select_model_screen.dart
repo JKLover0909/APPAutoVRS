@@ -320,56 +320,33 @@ class _SelectModelScreenState extends State<SelectModelScreen> {
         _selectedModelId = model['id_model'].toString();
       });
 
-      // Hiển thị SnackBar **trước khi pop màn hình** using global messenger
-      final snackBar = SnackBar(
-        content: Text(
-          'Đã chọn Model ${model['id_model'].toString()} thành công!',
-        ),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 2),
-      );
-
-      final messengerState = scaffoldMessengerKey.currentState;
-      if (messengerState != null && messengerState.mounted) {
-        messengerState.showSnackBar(snackBar);
-      } else {
-        // If the messenger isn't ready (rare), schedule the SnackBar for the next frame
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          scaffoldMessengerKey.currentState?.showSnackBar(snackBar);
-        });
-      }
-
-      // Delay một chút để người dùng nhìn thấy SnackBar
-      await Future.delayed(const Duration(milliseconds: 300));
+      // ✅ Bỏ snackbar vì đã có thông báo model đang chọn ở UI
 
       // Quay lại màn hình trước nếu có thể (use captured router)
+      if (!mounted) return;
       if (router.canPop()) {
         router.pop();
       }
     } catch (e) {
-      // Hiển thị lỗi nếu có using global messenger
-      if (mounted) {
-        final messengerState = scaffoldMessengerKey.currentState;
-        if (messengerState != null && messengerState.mounted) {
-          messengerState.showSnackBar(
-            SnackBar(
-              content: Text('Lỗi cập nhật model: $e'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-        } else {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            scaffoldMessengerKey.currentState?.showSnackBar(
-              SnackBar(
-                content: Text('Lỗi cập nhật model: $e'),
-                backgroundColor: Colors.red,
-                duration: const Duration(seconds: 3),
+      // Hiển thị lỗi bằng Dialog để nhất quán
+      if (!mounted) return;
+
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            icon: const Icon(Icons.error, color: Colors.red, size: 48),
+            title: const Text('Lỗi'),
+            content: Text('Không thể chọn model: $e'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Đóng'),
               ),
-            );
-          });
-        }
-      }
+            ],
+          );
+        },
+      );
     }
   }
 

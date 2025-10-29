@@ -50,8 +50,9 @@ class GerberImageWidget extends StatelessWidget {
 
         // Error state
         if (errorMessage != null || gerberService.lastError != null) {
-          final errorText = errorMessage ?? gerberService.lastError ?? 'Có lỗi xảy ra';
-          
+          final errorText =
+              errorMessage ?? gerberService.lastError ?? 'Có lỗi xảy ra';
+
           return Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
