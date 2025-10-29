@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_feather_icons/flutter_feather_icons.dart';
 import 'package:go_router/go_router.dart';
@@ -43,6 +44,10 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
   _pendingJudgement; // 'OK' or 'NG' when user selects but not yet confirmed
   bool _isLoadingGerber = false;
 
+  // ✅ AOI Image state
+  File? _aoiImageFile;
+  bool _isLoadingAoiImage = false;
+
   @override
   void initState() {
     super.initState();
@@ -61,9 +66,10 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
       );
       _connectToBackend(webSocketService);
 
-      // Auto load Gerber for first defect if available
+      // Auto load Gerber and AOI for first defect if available
       if (_defects.isNotEmpty) {
         _loadGerberForCurrentDefect();
+        _loadAOIImageForCurrentDefect();
       }
     });
   }
@@ -99,9 +105,12 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
       _currentDefectIndex = (_defects.isNotEmpty) ? 0 : 0;
     });
 
-    // Auto-load Gerber for first defect
+    // Auto-load Gerber and AOI for first defect
     if (_defects.isNotEmpty) {
       _loadGerberForCurrentDefect();
+      _loadAOIImageForCurrentDefect();
+    } else {
+      setState(() => _aoiImageFile = null);
     }
   }
 
@@ -810,20 +819,8 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                                               6,
                                                             ),
                                                       ),
-                                                      child: Stack(
-                                                        children: [
-                                                          const Center(
-                                                            child: Text(
-                                                              'AOI Capture',
-                                                              style: TextStyle(
-                                                                color: Colors
-                                                                    .black,
-                                                                fontSize: 12,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
+                                                      child:
+                                                          _buildAOIImageWidget(),
                                                     ),
                                                   ),
                                                 );
@@ -1380,6 +1377,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
     if (_defects.isNotEmpty && _currentDefectIndex > 0) {
       setState(() => _currentDefectIndex--);
       _loadGerberForCurrentDefect();
+      _loadAOIImageForCurrentDefect();
     }
   }
 
@@ -1387,6 +1385,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
     if (_defects.isNotEmpty && _currentDefectIndex < _defects.length - 1) {
       setState(() => _currentDefectIndex++);
       _loadGerberForCurrentDefect();
+      _loadAOIImageForCurrentDefect();
     }
   }
 
@@ -1671,5 +1670,126 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
     }
 
     return defectTypes.join(', ');
+  }
+
+  /// Load AOI image for current defect from database url_image field
+  Future<void> _loadAOIImageForCurrentDefect() async {
+    if (_defects.isEmpty || _currentDefectIndex >= _defects.length) {
+      setState(() {
+        _aoiImageFile = null;
+        _isLoadingAoiImage = false;
+      });
+      return;
+    }
+
+    final defect = _defects[_currentDefectIndex];
+    final urlImage = defect['url_image'] as String?;
+
+    if (urlImage == null || urlImage.isEmpty) {
+      debugPrint('⚠️ No url_image for defect ${_currentDefectIndex + 1}');
+      setState(() {
+        _aoiImageFile = null;
+        _isLoadingAoiImage = false;
+      });
+      return;
+    }
+
+    debugPrint('📷 Loading AOI image: $urlImage');
+    await _loadAOIImage(urlImage);
+  }
+
+  /// Load AOI image from file path
+  Future<void> _loadAOIImage(String filePath) async {
+    setState(() => _isLoadingAoiImage = true);
+
+    try {
+      final file = File(filePath);
+      if (await file.exists()) {
+        setState(() {
+          _aoiImageFile = file;
+          _isLoadingAoiImage = false;
+        });
+        debugPrint('✅ AOI image loaded: $filePath');
+      } else {
+        setState(() {
+          _aoiImageFile = null;
+          _isLoadingAoiImage = false;
+        });
+        debugPrint('❌ AOI image not found: $filePath');
+      }
+    } catch (e) {
+      setState(() {
+        _aoiImageFile = null;
+        _isLoadingAoiImage = false;
+      });
+      debugPrint('❌ Error loading AOI image: $e');
+    }
+  }
+
+  /// Build AOI image widget with loading/error states
+  Widget _buildAOIImageWidget() {
+    if (_isLoadingAoiImage) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 8),
+            Text(
+              'Đang tải ảnh AOI...',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_aoiImageFile != null && _aoiImageFile!.existsSync()) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: Image.file(
+          _aoiImageFile!,
+          fit: BoxFit.contain,
+          errorBuilder: (context, error, stackTrace) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.broken_image, size: 48, color: Colors.red),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Không thể load ảnh',
+                    style: TextStyle(fontSize: 12, color: Colors.red),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _aoiImageFile!.path,
+                    style: TextStyle(fontSize: 10, color: Colors.grey),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    // Default placeholder when no defects or no url_image
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.image_not_supported, size: 48, color: Colors.grey[400]),
+          const SizedBox(height: 8),
+          Text(
+            _defects.isEmpty ? 'Chưa có lỗi' : 'Không có ảnh AOI',
+            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          ),
+        ],
+      ),
+    );
   }
 }

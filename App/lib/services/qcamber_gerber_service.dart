@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart';
 class QCamberGerberService extends ChangeNotifier {
   static const String _baseUrl = 'http://localhost:8686';
   static const String _defaultLayer = 'l2';
-  static const double _defaultZoom = 128.0;
+  static const double _defaultZoom = 2024.0;
 
   bool _isLoading = false;
   String? _lastError;
@@ -66,7 +66,7 @@ class QCamberGerberService extends ChangeNotifier {
         'layerName': layerName,
         'x': x,
         'y': y,
-        'zoom': zoom,
+        'zoom': 4048.0,
       };
 
       debugPrint('📤 QCamber Payload: ${jsonEncode(payload)}');
