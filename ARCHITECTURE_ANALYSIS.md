@@ -19,7 +19,7 @@
 - **Frontend**: Flutter cross-platform (Windows, iOS, Android, Linux, macOS)
 
 ### Tech Stack
-
+- Check out C++
 #### Frontend (Flutter)
 ```
 ✅ State Management: Provider (MVVM-style)

@@ -58,7 +58,7 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
 
   // Gerber service for displaying PCB design images
   late QCamberGerberService _gerberService;
-  bool _isLoadingGerber = false;
+  final bool _isLoadingGerber = false;
 
   @override
   void initState() {
@@ -81,12 +81,12 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
         'VRSMainScreen: PROCESS received from server with defect_id=$defectId',
       );
       // Determine current board id from provider to reload defects after persisting
-      final _vrsProviderForReload = Provider.of<VRSProvider>(
+      final vrsProviderForReload = Provider.of<VRSProvider>(
         context,
         listen: false,
       );
-      final _boardIdFromProvider = int.tryParse(
-        _vrsProviderForReload.currentBoard,
+      final boardIdFromProvider = int.tryParse(
+        vrsProviderForReload.currentBoard,
       );
       // Run AI on current displayed frame
       final aiService = AIDetectionService();
@@ -151,10 +151,10 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
               _lastPersistedType = detectedType;
 
               // If we know the board id, reload defects and advance to next defect
-              if (_boardIdFromProvider != null) {
+              if (boardIdFromProvider != null) {
                 try {
                   final reloaded = await LocalDatabaseService()
-                      .getDefectsByBoard(_boardIdFromProvider);
+                      .getDefectsByBoard(boardIdFromProvider);
                   final foundIndex = reloaded.indexWhere((d) {
                     final did = d['id_defect'] ?? d['id'] ?? d['defect_id'];
                     if (did == null) return false;
@@ -277,10 +277,11 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
                     setState(() {
                       _defects[_currentIndex]['type'] = detectedType;
                       _defects[_currentIndex]['judgement'] = verdict;
-                      if (_currentIndex < _defects.length - 1)
+                      if (_currentIndex < _defects.length - 1) {
                         _currentIndex++;
-                      else
+                      } else {
                         _running = false;
+                      }
                       _defectListReloadToken++;
                     });
                     // record last persisted verdict/type for fallback persist
@@ -973,20 +974,19 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
 
                           // Start / Stop operator-driven workflow
                           Row(
-                            children: [
-                              Expanded(
-                                child: ElevatedButton(
+                                                   child: ElevatedButton(
                                   onPressed:
-                                      (boardText != 'Chưa có' && !_running)
+                                      (boardText != 'Chưa có' && !_runnin
+                                child: const Text('Bắt đầu'),g)
                                       ? () {
                                           final bId = int.tryParse(boardText);
                                           if (bId != null) _startWorkflow(bId);
                                         }
-                                      : null,
-                                  child: const Text('Bắt đầu'),
+                                      ('Bắt đầu'),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.green,
-                                  ),
+                
+                                child: const Text('Dừng'),                  ),
                                 ),
                               ),
                               const SizedBox(width: 12),

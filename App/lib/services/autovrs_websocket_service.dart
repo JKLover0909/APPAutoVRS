@@ -64,6 +64,8 @@ class AutoVRSWebSocketService extends ChangeNotifier {
 
   // Phương thức để lấy ảnh hiện tại đang hiển thị
   Uint8List? get displayImage {
+    return null;
+
     // debugPrint(
     //   '🖼️ displayImage called - isViewingCaptured: $_isViewingCapturedImage',
     // );
@@ -148,9 +150,10 @@ class AutoVRSWebSocketService extends ChangeNotifier {
         _frameCountNotifier.value = _frameCount;
         optimizeMemory();
         if (_frameCount % 5 == 0) notifyListeners();
-        if (_frameCount % 30 == 0)
+        if (_frameCount % 30 == 0) {
           // debugPrint('📹 Frame processed: $_frameCount')
           ;
+        }
       } else if (message is String) {
         // Nếu là text (JSON)
         try {

@@ -877,20 +877,16 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                 const SizedBox(height: 12),
                                 _buildInfoRow(
                                   'Số thứ tự bo (Id_board):',
-                                  vrsProvider.currentBoard != null &&
-                                          vrsProvider.currentBoard!.isNotEmpty
-                                      ? vrsProvider.currentBoard!
-                                      : 'Chưa có',
+                                  vrsProvider.currentBoarBoard!.isNotEmpty
+                                     ? vrsProvider.currentBoard!
+                                     : 'Chưa có',
                                 ),
                                 const SizedBox(height: 12),
                                 _buildInfoRow(
                                   'Loại lỗi AI dự đoán:',
-                                  _getAIPredictionText(),
-                                ),
+                                  _getA             const Sizedox(height: 16),
 
-                                const SizedBox(height: 16),
-
-                                // Defect list for current board
+                                // Defect list for curret board
                                 DefectListWidget(
                                   boardId: int.tryParse(
                                     vrsProvider.currentBoard,

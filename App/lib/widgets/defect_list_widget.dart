@@ -13,11 +13,11 @@ class DefectListWidget extends StatefulWidget {
   final int reloadToken;
 
   const DefectListWidget({
-    Key? key,
+    super.key,
     required this.boardId,
     this.height = 220,
     this.reloadToken = 0,
-  }) : super(key: key);
+  });
 
   @override
   State<DefectListWidget> createState() => _DefectListWidgetState();
@@ -119,7 +119,7 @@ class _DefectListWidgetState extends State<DefectListWidget> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade300!, width: 1),
+            border: Border.all(color: Colors.grey.shade300, width: 1),
           ),
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(vertical: 8),

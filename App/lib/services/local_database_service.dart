@@ -179,12 +179,12 @@ class LocalDatabaseService {
   // ========== MODEL OPERATIONS ==========
   Future<int> insertModel(Map<String, dynamic> model) async {
     final db = await database;
-    final id_model = await db.insert(
+    final idModel = await db.insert(
       'tbModel',
       model,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    return id_model;
+    return idModel;
   }
 
   Future<List<Map<String, dynamic>>> getAllModels() async {

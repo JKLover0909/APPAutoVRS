@@ -362,10 +362,9 @@ class _SelectModelScreenState extends State<SelectModelScreen> {
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Hủy'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Xóa'),
+              onPressed: () => Navigator.pop(dialogContext, true),
+            c
+            child: const Text('Xóa'),hild: const Text('Xóa'),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
           ),
         ],

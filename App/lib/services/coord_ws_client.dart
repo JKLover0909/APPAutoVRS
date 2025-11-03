@@ -11,7 +11,7 @@ class CoordWsClient {
   StreamSubscription? _sub;
   OnMessage? onMessage;
 
-  CoordWsClient({this.uri = 'ws://127.0.0.1:8765'}) {}
+  CoordWsClient({this.uri = 'ws://127.0.0.1:8765'});
 
   Future<void> connect() async {
     await disconnect();

@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 
 /// Extension cho manual_vrs_screen.dart
 /// Chứa logic load Gerber image khi click vào defect
