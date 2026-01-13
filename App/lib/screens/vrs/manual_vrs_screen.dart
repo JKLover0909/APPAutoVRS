@@ -5,7 +5,7 @@ import 'package:flutter_feather_icons/flutter_feather_icons.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../services/autovrs_websocket_service.dart';
-import '../../services/video_frame_service.dart';
+// import '../../services/video_frame_service.dart'; // Disabled - using AutoVRSWebSocketService
 import '../../services/ai_detection_service.dart';
 import '../../services/qcamber_gerber_service.dart';
 import '../../providers/vrs_provider.dart';
@@ -32,7 +32,8 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
 
   // Streamlined state management for capture + AI detection
   late AIDetectionService _aiDetectionService;
-  late VideoFrameService _videoFrameService;
+  // VideoFrameService disabled - using AutoVRSWebSocketService for SICK camera (port 8999)
+  // late VideoFrameService _videoFrameService;
   late QCamberGerberService _gerberService;
   final int _selectedVideoSource = 0; // 0: AutoVRS, 1: Video Stream
 
@@ -54,7 +55,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
 
     // Initialize AI Detection Service
     _aiDetectionService = AIDetectionService();
-    _videoFrameService = VideoFrameService();
+    // _videoFrameService = VideoFrameService(); // Disabled
     _gerberService = context.read<QCamberGerberService>();
 
     // Kết nối AutoVRS WebSocket khi khởi tạo màn hình
@@ -82,7 +83,10 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
     final board = vrsProvider.currentBoard;
     if (board != _currentBoardId) {
       _currentBoardId = board;
-      _loadDefectsForBoard(board);
+      // Use post-frame callback to avoid calling setState during build
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadDefectsForBoard(board);
+      });
     }
   }
 
@@ -94,7 +98,10 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
         _defects = [];
         _currentDefectIndex = 0;
       });
-      _gerberService.clearImage();
+      // Schedule clearImage after build to avoid setState during build
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _gerberService.clearImage();
+      });
       return;
     }
 
@@ -178,9 +185,8 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
           filename: filename,
           enableDetection: true,
         );
-      } else {
-        // Video Frame Service
-        currentFrame = _videoFrameService.currentFrame;
+        // Get current frame from AutoVRS WebSocket service
+        currentFrame = webSocketService.currentFrame;
       }
 
       if (currentFrame == null) {
@@ -225,7 +231,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
   @override
   void dispose() {
     _aiDetectionService.dispose();
-    _videoFrameService.dispose();
+    // _videoFrameService.dispose(); // Disabled - using AutoVRSWebSocketService
     super.dispose();
   }
 

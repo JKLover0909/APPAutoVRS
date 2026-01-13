@@ -3,11 +3,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 class AutoVRSWebSocketService extends ChangeNotifier {
-  static const String defaultServerUrl = 'ws://127.0.0.1:12345/';
-  //ws://127.0.0.1:12345/
-  //wss://5d0fc6ea5f81.ngrok-free.app/
+  static const String defaultServerUrl = 'ws://localhost:8999';
+  // SICK Camera WebSocket Stream (port 8999)
+  // Old C++ module was on ws://127.0.0.1:12345/
 
   WebSocketChannel? _channel;
   StreamSubscription? _subscription;
@@ -64,23 +65,10 @@ class AutoVRSWebSocketService extends ChangeNotifier {
 
   // Phương thức để lấy ảnh hiện tại đang hiển thị
   Uint8List? get displayImage {
-    // debugPrint(
-    //   '🖼️ displayImage called - isViewingCaptured: $_isViewingCapturedImage',
-    // );
-    // debugPrint('🖼️ _capturedImage available: ${_capturedImage != null}');
-    // debugPrint('🖼️ _currentFrame available: ${_currentFrame != null}');
-
-    // if (_isViewingCapturedImage && _capturedImage != null) {
-    //   debugPrint(
-    //     '🖼️ Returning captured image (${_capturedImage!.length} bytes)',
-    //   );
-    //   return _capturedImage;
-    // } else {
-    //   debugPrint(
-    //     '🖼️ Returning current frame (${_currentFrame?.length ?? 0} bytes)',
-    //   );
-    //   return _currentFrame;
-    // }
+    if (_isViewingCapturedImage && _capturedImage != null) {
+      return _capturedImage;
+    }
+    return _currentFrame;
   }
 
   /// Kết nối đến AutoVRS WebSocket server
@@ -91,7 +79,8 @@ class AutoVRSWebSocketService extends ChangeNotifier {
     try {
       await disconnect(); // Đóng kết nối cũ nếu có
 
-      final uri = Uri.parse('$serverUrl/ws/$clientId');
+      // SICK camera doesn't need /ws/clientId path, just direct connection
+      final uri = Uri.parse(serverUrl);
       _channel = WebSocketChannel.connect(uri);
 
       // Lắng nghe messages từ server
@@ -102,11 +91,12 @@ class AutoVRSWebSocketService extends ChangeNotifier {
       );
 
       _isConnected = true;
+      _isConnectedNotifier.value = true;
       _lastError = null;
       notifyListeners();
 
-      // Gửi ping để test kết nối
-      await _sendPing();
+      // Don't send ping to SICK camera - it only streams binary JPEG
+      debugPrint('✅ Connected to SICK camera backend');
 
       return true;
     } catch (e) {
@@ -413,50 +403,112 @@ class AutoVRSWebSocketService extends ChangeNotifier {
     String? filename,
     bool enableDetection = true,
   }) async {
-    debugPrint('📤 CAPTURE IMAGE CALLED');
+    debugPrint('📤 CAPTURE IMAGE CALLED (SICK Camera Mode)');
 
-    if (!_isConnected || _channel == null) {
+    if (!_isConnected) {
       debugPrint('📤 ERROR: Not connected to server');
-      throw Exception('Not connected to server');
+      throw Exception('Not connected to camera server');
     }
 
-    final message = {
-      'command': 'capture_image',
-      'request_id': 'capture_${DateTime.now().millisecondsSinceEpoch}',
-      'enable_detection': enableDetection,
-      if (filename != null) 'filename': filename,
-    };
+    // SICK camera mode: Capture current frame and send to AI API
+    if (_currentFrame == null) {
+      debugPrint('📤 ERROR: No current frame available');
+      throw Exception('No frame available to capture');
+    }
 
-    debugPrint('📤 Sending message: $message');
-    _channel!.sink.add(jsonEncode(message));
-    debugPrint('📤 Message sent to WebSocket');
+    try {
+      // Save current frame as captured image
+      _capturedImage = _currentFrame;
+      _capturedImageNotifier.value = _currentFrame;
+      _isViewingCapturedImage = true;
+      _isViewingCapturedImageNotifier.value = true;
+
+      debugPrint('📸 Frame captured (${_currentFrame!.length} bytes)');
+
+      // Send to AI detection API if enabled
+      if (enableDetection) {
+        await _sendToAIDetection(_currentFrame!);
+      }
+
+      notifyListeners();
+    } catch (e) {
+      _lastError = 'Capture failed: $e';
+      debugPrint('❌ Capture error: $e');
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  /// Send image to AI Detection API (port 8082)
+  Future<void> _sendToAIDetection(Uint8List imageBytes) async {
+    try {
+      debugPrint('🤖 Sending to AI Detection API (port 8082)...');
+
+      final uri = Uri.parse('http://localhost:8082/detect');
+      final request = http.MultipartRequest('POST', uri);
+
+      // Add image file
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          imageBytes,
+          filename: 'capture_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        ),
+      );
+
+      // Send request
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+        // Store detection results
+        _lastDetectionResults = data;
+        _lastAnalysis = data['analysis'] as Map<String, dynamic>?;
+
+        debugPrint('✅ AI Detection complete: ${data['num_defects']} defects');
+        debugPrint('🔍 Detection data: $data');
+
+        notifyListeners();
+      } else {
+        _lastError = 'AI Detection failed: ${response.statusCode}';
+        debugPrint('❌ AI API error: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      _lastError = 'AI Detection error: $e';
+      debugPrint('❌ AI Detection exception: $e');
+    }
   }
 
   /// Gửi request lấy status
-  Future<void> requestStatus() async {
-    if (!_isConnected || _channel == null) {
-      throw Exception('Not connected to server');
-    }
-
-    final message = {'command': 'get_status'};
-
-    _channel!.sink.add(jsonEncode(message));
-  }
+  /// DISABLED: SICK camera doesn't support JSON commands
+  // Future<void> requestStatus() async {
+  //   if (!_isConnected || _channel == null) {
+  //     throw Exception('Not connected to server');
+  //   }
+  //
+  //   final message = {'command': 'get_status'};
+  //
+  //   _channel!.sink.add(jsonEncode(message));
+  // }
 
   /// Bật/tắt defect detection
-  Future<void> setDetectionEnabled(bool enabled) async {
-    if (!_isConnected || _channel == null) {
-      throw Exception('Not connected to server');
-    }
-
-    final message = {
-      'command': 'set_detection',
-      'request_id': 'detection_${DateTime.now().millisecondsSinceEpoch}',
-      'enabled': enabled,
-    };
-
-    _channel!.sink.add(jsonEncode(message));
-  }
+  /// DISABLED: SICK camera doesn't support JSON commands
+  /// Detection is handled separately via AI API (port 8082)
+  // Future<void> setDetectionEnabled(bool enabled) async {
+  //   if (!_isConnected || _channel == null) {
+  //     throw Exception('Not connected to server');
+  //   }
+  //
+  //   final message = {
+  //     'command': 'set_detection',
+  //     'request_id': 'detection_${DateTime.now().millisecondsSinceEpoch}',
+  //     'enabled': enabled,
+  //   };
+  //
+  //   _channel!.sink.add(jsonEncode(message));
+  // }
 
   /// Xử lý camera status messages
   void _handleCameraStatus(Map<String, dynamic> data) {
@@ -470,16 +522,17 @@ class AutoVRSWebSocketService extends ChangeNotifier {
   }
 
   /// Gửi ping để test kết nối
-  Future<void> _sendPing() async {
-    if (!_isConnected || _channel == null) return;
-
-    final message = {
-      'command': 'ping',
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
-    };
-
-    _channel!.sink.add(jsonEncode(message));
-  }
+  /// DISABLED: SICK camera only streams binary JPEG, doesn't handle JSON commands
+  // Future<void> _sendPing() async {
+  //   if (!_isConnected || _channel == null) return;
+  //
+  //   final message = {
+  //     'command': 'ping',
+  //     'timestamp': DateTime.now().millisecondsSinceEpoch,
+  //   };
+  //
+  //   _channel!.sink.add(jsonEncode(message));
+  // }
 
   /// Memory optimization: Clear old frame data
   void _clearOldFrames() {

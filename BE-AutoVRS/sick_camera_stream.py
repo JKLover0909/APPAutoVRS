@@ -200,7 +200,7 @@ class SICKCameraStreamServer:
                 logger.error(f"❌ Frame sender error: {e}")
                 await asyncio.sleep(0.1)
     
-    async def handle_client(self, websocket, path):
+    async def handle_client(self, websocket):
         """Handle WebSocket client connection"""
         client_addr = websocket.remote_address
         logger.info(f"✅ Client connected: {client_addr}")
