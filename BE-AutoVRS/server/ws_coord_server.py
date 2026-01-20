@@ -1,9 +1,10 @@
 import asyncio
 import json
 import websockets # type: ignore
-from concurrent.futures import ThreadPoolExecutor
+import httpx  # For calling PLC Gateway API
 
 CONNECTED = set()
+PLC_GATEWAY_URL = "http://localhost:8083/api/plc/move"
 
 async def handle(ws, path=None):
     print("Client connected:", ws.remote_address)
@@ -19,19 +20,43 @@ async def handle(ws, path=None):
             if data.get("type") == "coords":
                 print("\n===> New coords received:")
                 print(f" board_id={data.get('board_id')} defect_id={data.get('defect_id')}")
-                print(" coords:", data.get("x"), data.get("y"))
-                print("\nPress 'q' then Enter to send PROCESS to client (or 's' to skip).")
-
-                loop = asyncio.get_event_loop()
-                with ThreadPoolExecutor(1) as ex:
-                    inp = await loop.run_in_executor(ex, input, "> ")
-
-                if inp.strip().lower() == 'q':
-                    reply = {"type": "process", "defect_id": data.get("defect_id")}
-                    await ws.send(json.dumps(reply))
-                    print("Sent PROCESS to client for defect_id:", data.get("defect_id"))
-                else:
-                    print("Skipped PROCESS for this defect.")
+                print(f" coords: X={data.get('x')}mm, Y={data.get('y')}mm")
+                
+                # Call PLC Gateway API to move camera
+                try:
+                    async with httpx.AsyncClient(timeout=15.0) as client:
+                        print(f"\n📡 Calling PLC Gateway API: {PLC_GATEWAY_URL}")
+                        response = await client.post(
+                            PLC_GATEWAY_URL,
+                            json={
+                                "x": data.get("x"),
+                                "y": data.get("y"),
+                                "board_id": data.get("board_id"),
+                                "defect_id": data.get("defect_id")
+                            }
+                        )
+                        
+                        if response.status_code == 200:
+                            result = response.json()
+                            print(f"✅ PLC movement successful:")
+                            print(f"   {result.get('message')}")
+                            print(f"   Elapsed: {result.get('elapsed_seconds', 0):.1f}s")
+                            
+                            # Send PROCESS signal to Flutter client
+                            reply = {"type": "process", "defect_id": data.get("defect_id")}
+                            await ws.send(json.dumps(reply))
+                            print(f"✅ Sent PROCESS signal to Flutter client for defect_id={data.get('defect_id')}")
+                        else:
+                            error_detail = response.json().get("detail", "Unknown error")
+                            print(f"❌ PLC Gateway API error: {response.status_code} - {error_detail}")
+                            
+                except httpx.TimeoutException:
+                    print(f"❌ PLC Gateway API timeout (>15s)")
+                except httpx.ConnectError:
+                    print(f"❌ Cannot connect to PLC Gateway at {PLC_GATEWAY_URL}")
+                    print("   Make sure run_plc_gateway.py is running")
+                except Exception as e:
+                    print(f"❌ Error calling PLC Gateway: {e}")
 
             elif data.get("type") == "result":
                 print("\n<=== AI result received from client:")

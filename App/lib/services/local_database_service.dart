@@ -72,38 +72,152 @@ class LocalDatabaseService {
       // where the app might be pointing at a bundled/read-only DB.
       final dbFile = File(path);
       if (await dbFile.exists()) {
+        debugPrint('📁 Database file exists, checking write permissions...');
         try {
           final raf = await dbFile.open(mode: FileMode.append);
           await raf.close();
+          debugPrint('✅ Database file is writable');
         } catch (e) {
           debugPrint(
-            'Database file not writable ($e). Attempting writable fallback.',
+            '⚠️ Database file not writable ($e). Attempting writable fallback.',
           );
           final dir = dbFile.parent.path;
           final fallbackPath = join(dir, 'autovrs_rw.db');
           final fallbackFile = File(fallbackPath);
           if (!await fallbackFile.exists()) {
             // copy read-only DB to writable copy
+            debugPrint('📋 Copying to fallback: $fallbackPath');
             await dbFile.copy(fallbackPath);
-            debugPrint('Copied DB to writable fallback: $fallbackPath');
+            debugPrint('✅ Copied DB to writable fallback: $fallbackPath');
           } else {
-            debugPrint('Using existing writable fallback DB: $fallbackPath');
+            debugPrint('✅ Using existing writable fallback DB: $fallbackPath');
           }
           path = fallbackPath;
         }
+      } else {
+        debugPrint(
+          '📝 Database file does not exist, will be created at: $path',
+        );
+        // Ensure parent directory is writable
+        final dir = dbFile.parent;
+        if (!await dir.exists()) {
+          await dir.create(recursive: true);
+          debugPrint('✅ Created database directory: ${dir.path}');
+        }
+
+        // Test if we can write to this directory
+        try {
+          final testFile = File(join(dir.path, '.write_test'));
+          await testFile.writeAsString('test');
+          await testFile.delete();
+          debugPrint('✅ Directory is writable');
+        } catch (e) {
+          debugPrint('❌ Directory not writable: $e');
+          throw Exception(
+            'Cannot write to database directory: ${dir.path}. Error: $e',
+          );
+        }
       }
 
-      return await openDatabase(
-        path,
-        version: 1,
-        onCreate: _createTables,
-        onOpen: (db) {
-          debugPrint('Database opened successfully at $path');
-        },
-      );
+      // Try to open database with retry logic for read-only issues
+      try {
+        return await openDatabase(
+          path,
+          version: 1,
+          onCreate: _createTables,
+          onOpen: (db) async {
+            debugPrint('Database opened successfully at $path');
+            // Kiểm tra và tạo cột id_model nếu chưa tồn tại
+            await _migrateDatabase(db);
+          },
+          readOnly: false, // ✅ Explicitly set writable mode
+          singleInstance: true, // ✅ Prevent multiple instances
+        );
+      } catch (e) {
+        final errMsg = e.toString();
+        // If read-only error during open, try fallback immediately
+        if (errMsg.toLowerCase().contains('read-only') ||
+            errMsg.toLowerCase().contains('read only') ||
+            errMsg.toLowerCase().contains('readonly')) {
+          debugPrint('⚠️ Database open failed (read-only): $e');
+          debugPrint('🔄 Attempting writable fallback database...');
+
+          final dir = dbFile.parent.path;
+          final fallbackPath = join(dir, 'autovrs_rw.db');
+          debugPrint('📂 Fallback path: $fallbackPath');
+
+          return await openDatabase(
+            fallbackPath,
+            version: 1,
+            onCreate: _createTables,
+            onOpen: (db) async {
+              debugPrint('✅ Fallback database opened at $fallbackPath');
+              await _migrateDatabase(db);
+            },
+            readOnly: false,
+            singleInstance: true,
+          );
+        }
+        rethrow;
+      }
     } catch (e) {
       debugPrint('Error creating database: $e');
       rethrow;
+    }
+  }
+
+  Future<void> _migrateDatabase(Database db) async {
+    try {
+      // Kiểm tra xem cột id_model đã tồn tại trong tbModel chưa
+      final info = await db.rawQuery("PRAGMA table_info(tbModel)");
+      final hasIdModel = info.any((col) => col['name'] == 'id_model');
+
+      if (!hasIdModel) {
+        debugPrint('⚠️ Migration: Adding id_model column to tbModel');
+        await db.execute(
+          'ALTER TABLE tbModel ADD COLUMN id_model INTEGER PRIMARY KEY',
+        );
+        debugPrint('✅ Migration completed: id_model column added');
+      }
+
+      // Kiểm tra tbLot có cột tbModelid_model chưa
+      final lotInfo = await db.rawQuery("PRAGMA table_info(tbLot)");
+      final hasTbModelIdModel = lotInfo.any(
+        (col) => col['name'] == 'tbModelid_model',
+      );
+
+      if (!hasTbModelIdModel) {
+        debugPrint('⚠️ Migration: Adding tbModelid_model column to tbLot');
+        try {
+          await db.execute(
+            'ALTER TABLE tbLot ADD COLUMN tbModelid_model INTEGER',
+          );
+          debugPrint('✅ Migration completed: tbModelid_model column added');
+        } catch (e) {
+          debugPrint('⚠️ Could not add tbModelid_model to tbLot: $e');
+        }
+      }
+
+      // Kiểm tra tbBoard có cột tbLotid_lot chưa
+      final boardInfo = await db.rawQuery("PRAGMA table_info(tbBoard)");
+      final hasTbLotIdLot = boardInfo.any(
+        (col) => col['name'] == 'tbLotid_lot',
+      );
+
+      if (!hasTbLotIdLot) {
+        debugPrint('⚠️ Migration: Adding tbLotid_lot column to tbBoard');
+        try {
+          await db.execute(
+            'ALTER TABLE tbBoard ADD COLUMN tbLotid_lot INTEGER',
+          );
+          debugPrint('✅ Migration completed: tbLotid_lot column added');
+        } catch (e) {
+          debugPrint('⚠️ Could not add tbLotid_lot to tbBoard: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ Migration warning (non-critical): $e');
+      // Không throw - cho phép app tiếp tục chạy
     }
   }
 
@@ -316,20 +430,24 @@ class LocalDatabaseService {
   Future<int> updateDefect(int idDefect, Map<String, dynamic> fields) async {
     Database db = await database;
     try {
-      return await db.update(
+      final result = await db.update(
         'tbDefect',
         fields,
         where: 'id_defect = ?',
         whereArgs: [idDefect],
       );
+      debugPrint(
+        '✅ Updated defect $idDefect successfully ($result rows affected)',
+      );
+      return result;
     } catch (e) {
-      debugPrint('LocalDatabaseService.updateDefect failed: $e');
+      debugPrint('❌ LocalDatabaseService.updateDefect failed: $e');
       final errMsg = e.toString();
       // If failure caused by read-only file system, try to reinitialize DB (will trigger writable fallback)
       if (errMsg.toLowerCase().contains('read-only') ||
           errMsg.toLowerCase().contains('read only')) {
         debugPrint(
-          'Detected read-only DB; attempting to reopen database and retry update',
+          '🔄 Detected read-only DB; attempting to reopen database and retry update',
         );
         try {
           if (_db != null) {
@@ -340,14 +458,18 @@ class LocalDatabaseService {
           }
           db =
               await database; // re-open (fallback copy logic in _initDatabase will run)
-          return await db.update(
+          final retryResult = await db.update(
             'tbDefect',
             fields,
             where: 'id_defect = ?',
             whereArgs: [idDefect],
           );
+          debugPrint(
+            '✅ Retry successful: Updated defect $idDefect ($retryResult rows affected)',
+          );
+          return retryResult; // ✅ Return success, don't rethrow!
         } catch (re) {
-          debugPrint('Retry after reopening DB failed: $re');
+          debugPrint('❌ Retry after reopening DB failed: $re');
           rethrow;
         }
       }

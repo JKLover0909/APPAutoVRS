@@ -1,33 +1,42 @@
 # -*- coding: utf-8 -*-
 # AutoVRS AI Detection API
-# Backend Python với FastAPI và Ultralytics YOLO
+# Backend Python với FastAPI và Advanced Inspection Pipeline (AOI Inspection Core)
 
-from fastapi import FastAPI, HTTPException # type: ignore
-from fastapi.middleware.cors import CORSMiddleware # type: ignore
-from pydantic import BaseModel # type: ignore
-from typing import List, Dict, Any
-import cv2 # type: ignore
-import numpy as np # type: ignore
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import List, Dict, Any, Optional
+import cv2
+import numpy as np
 import base64
 from datetime import datetime
 import logging
 import os
 import traceback
-from ultralytics import YOLO # type: ignore
+import sys
+
+# Add current directory to path to find local modules
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# Import AI Core
+try:
+    import config_ai
+    from src.inspection_pipeline import InspectionPipeline, PipelineConfig
+    from utils.detection import InspectionResult
+except ImportError as e:
+    print(f"CRITICAL ERROR: Failed to import AI Core modules: {e}")
+    # Fallback/Exit logic handled in startup
+    raise e
 
 # ===============================
 # Logging
 # ===============================
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-logger = logging.getLogger("AutoVRS_AI")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger("AutoVRS_AI_Advanced")
 
 # ===============================
 # FastAPI app
 # ===============================
-# ===============================
-# FastAPI app
-# ===============================
-# create FastAPI app and CORS
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
@@ -37,13 +46,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 # Pydantic models for request/response
 class DetectionRequest(BaseModel):
     image_base64: str
     confidence_threshold: float = 0.25
     iou_threshold: float = 0.45
-
 
 class DetectionResult(BaseModel):
     success: bool
@@ -52,144 +59,61 @@ class DetectionResult(BaseModel):
     processed_image_base64: str = ""
     statistics: Dict[str, Any] = {}
     timestamp: str
-# ===== Single OBB inference helper (uses task='obb') =====
-class SingleOBBInference:
-    def __init__(self, model_path: str):
-        """Load a YOLO model with OBB outputs (task='obb')."""
-        self.model_path = model_path
-        # instantiate Ultralytics model with obb task to get .obb in results
-        self.model = YOLO(model_path, task='obb')
-        # Normalize names into a safe dict-like mapping
-        names = getattr(self.model, 'names', None)
-        if names is None:
-            self.names = {}
-        elif isinstance(names, dict):
-            self.names = names
-        elif isinstance(names, (list, tuple)):
-            self.names = {i: n for i, n in enumerate(names)}
-        else:
-            self.names = {}
-        logger.info(f"Loaded OBB model: {model_path}")
-
-    def infer_image(self, image_path: str):
-        """Run model on image_path and return detections + annotated image.
-        Returns dict: {'num_objects', 'detections', 'annotated_image'}
-        """
-        results = self.model(image_path)[0]
-        obb = getattr(results, 'obb', None)
-        names = getattr(results, 'names', self.names)
-        image = cv2.imread(image_path)
-
-        if obb is None or len(getattr(obb, 'cls', [])) == 0:
-            logger.warning("No objects detected (OBB).")
-            return {'num_objects': 0, 'detections': [], 'annotated_image': image}
-
-        # Safely obtain polygon coords (avoid using `or` on tensor-like objects)
-        polygons = getattr(obb, 'xyxyxyxy', None)
-        if polygons is None:
-            polygons = getattr(obb, 'xyxy', None)
-        conf = getattr(obb, 'conf', None)
-        cls = getattr(obb, 'cls', None)
-
-        # Convert PyTorch tensors to numpy arrays if necessary
-        try:
-            import importlib
-            _torch = importlib.import_module('torch')
-            if polygons is not None and isinstance(polygons, _torch.Tensor):
-                polygons = polygons.cpu().numpy()
-            if conf is not None and isinstance(conf, _torch.Tensor):
-                conf = conf.cpu().numpy()
-            if cls is not None and isinstance(cls, _torch.Tensor):
-                cls = cls.cpu().numpy()
-        except Exception:
-            # torch may not be installed or conversion may fail; continue gracefully
-            pass
-
-        detections = []
-        if cls is None or len(cls) == 0:
-            logger.warning("OBB results contain no classes")
-            return {'num_objects': 0, 'detections': [], 'annotated_image': image}
-
-        for i in range(len(cls)):
-            cls_id = int(cls[i])
-            # safe name lookup
-            if isinstance(names, dict):
-                class_name = names.get(cls_id, str(cls_id))
-            else:
-                try:
-                    class_name = names[cls_id] if cls_id < len(names) else str(cls_id)
-                except Exception:
-                    class_name = str(cls_id)
-
-            conf_val = float(conf[i]) if (conf is not None and len(conf) > i) else 0.0
-            poly = None
-            if polygons is not None:
-                try:
-                    poly = polygons[i]
-                except Exception:
-                    poly = None
-
-            detections.append({
-                'class_id': cls_id,
-                'class_name': class_name,
-                'conf': conf_val,
-                'polygon': poly.tolist() if (poly is not None and hasattr(poly, 'tolist')) else (list(poly) if poly is not None else [])
-            })
-
-        # draw OBB
-        annotated = self.draw_obb(image.copy(), polygons, conf, cls, names)
-
-        return {'num_objects': len(cls), 'detections': detections, 'annotated_image': annotated}
-
-    @staticmethod
-    def draw_obb(img, polygons, conf, cls, names):
-        for i in range(len(cls)):
-            try:
-                pts = np.array(polygons[i]).reshape((4,2)).astype(np.int32)
-                pts = pts.reshape((-1, 1, 2))
-                cv2.polylines(img, [pts], isClosed=True, color=(0,255,0), thickness=2)
-                x_text, y_text = pts[0][0]
-                cls_id = int(cls[i])
-                label = names.get(cls_id, str(cls_id)) if isinstance(names, dict) else (names[cls_id] if cls_id < len(names) else str(cls_id))
-                cv2.putText(img, f"{label}:{conf[i]:.2f}", (int(x_text), int(y_text)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,255), 2)
-            except Exception:
-                continue
-        return img
-
 
 # ===============================
-# AI Detection Service (uses SingleOBBInference)
+# AI Service Wrapper
 # ===============================
-class AIDetectionService:
-    def __init__(self, model_path: str):
-        self.model_path = model_path
-        self.model = None
-        self.inferer = None
+class AdvancedAIService:
+    def __init__(self):
+        self.pipeline: Optional[InspectionPipeline] = None
+        self.config = None
         self.class_names_vi = {
-            0: 'Bám Dính Không Tốt',
-            1: 'Châm Kim',
-            2: 'Dị vật',
-            3: 'Khuyết mạch',
-            4: 'Ngắn Mạch',
-            5: 'Thiếu Đồng',
-            6: 'Thừa Đồng',
-            7: 'Xước',
-            8: 'Orther'
+            "BamDinhKhongTot": "Bám Dính Không Tốt",
+            "ChamKim": "Châm Kim",
+            "DiVat": "Dị vật",
+            "DiVatDuongMach": "Dị vật đường mạch",
+            "KhuyetMach": "Khuyết mạch",
+            "NganMach": "Ngắn Mạch",
+            "ThieuDong": "Thiếu Đồng",
+            "ThieuDongDuongMach": "Thiếu Đồng Đường Mạch",
+            "ThuaDong": "Thừa Đồng",
+            "ThuaDongDuongMach": "Thừa Đồng Đường Mạch",
+            "VetLom": "Vết Lõm",
+            "Xuoc": "Xước",
+            "Other": "Khác"
         }
-        self.load_model()
+        self.initialize_pipeline()
 
-    def load_model(self):
-        """Load model and wrap with OBB inferer."""
+    def initialize_pipeline(self):
+        """Initialize the ONNX Inspection Pipeline with config."""
         try:
-            logger.info(f"🚀 Loading model (OBB) from {self.model_path}")
-            self.inferer = SingleOBBInference(self.model_path)
-            self.model = self.inferer.model
-            logger.info("✅ Model (OBB) loaded successfully")
+            logger.info("🚀 Initializing ONNX AOI Inspection Pipeline...")
+            
+            # Create config from config_ai.py
+            self.config = PipelineConfig(
+                multiclass_model_path=config_ai.MULTICLASS_MODEL,
+                single_engine_paths=config_ai.SINGLE_ENGINE_PATHS,
+                single_engine_names=config_ai.SINGLE_ENGINE_NAMES,
+                # multiclass_class_map not needed - uses sequential class_names
+                imgsz=config_ai.IMGSZ,
+                conf_multiclass=config_ai.CONF_MULTICLASS,
+                conf_single=config_ai.CONF_SINGLE,
+                iou_nms_single=config_ai.IOU_NMS_SINGLE,
+                single_threads=config_ai.SINGLE_THREADS,
+                sam_model_path=config_ai.SAM_MODEL_PATH,
+                pixel_size_um=config_ai.PIXEL_SIZE_UM
+            )
+            
+            # Add ONNX providers to config
+            self.config.onnx_providers = config_ai.ONNX_PROVIDERS
+            
+            self.pipeline = InspectionPipeline(self.config)
+            logger.info("✅ ONNX Pipeline initialized successfully")
+            logger.info(f"🖥️  Using: {config_ai.ONNX_PROVIDERS}")
+            
         except Exception as e:
-            logger.exception(f"❌ Failed to load model: {e}")
-            logger.debug(traceback.format_exc())
-            self.model = None
-            self.inferer = None
+            logger.exception(f"❌ Failed to initialize ONNX pipeline: {e}")
+            self.pipeline = None
 
     def preprocess_image(self, image_base64: str) -> np.ndarray:
         """Decode base64 image -> BGR numpy"""
@@ -206,7 +130,7 @@ class AIDetectionService:
     def save_image(self, image: np.ndarray, folder: str, prefix: str):
         """Save image to folder with timestamp"""
         os.makedirs(folder, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         filename = f"{prefix}_{timestamp}.jpg"
         path = os.path.join(folder, filename)
         cv2.imwrite(path, image)
@@ -215,100 +139,164 @@ class AIDetectionService:
     def encode_image_to_base64(self, image: np.ndarray) -> str:
         _, buffer = cv2.imencode(".jpg", image)
         return base64.b64encode(buffer.tobytes()).decode("utf-8")
-
-    def run_inference(self, image_path: str, confidence_threshold: float, iou_threshold: float):
-        """Run OBB inference via SingleOBBInference."""
-        if self.inferer is None:
-            raise RuntimeError("Model not loaded")
-
-        try:
-            result = self.inferer.infer_image(image_path)
-        except Exception as e:
-            logger.exception(f"Inference error for image {image_path}: {e}")
-            logger.debug(traceback.format_exc())
-            raise
-
-        detections = result.get('detections', [])
-        annotated_image = result.get('annotated_image', None)
-
-        # Stats
+    
+    def format_results(self, inspection_results: List[InspectionResult], image: np.ndarray):
+        """
+        Format Pipeline results to match legacy API response format.
+        Also draws results on the image.
+        """
+        detections_out = []
         stats = {
-            "total_defects": len(detections),
+            "total_defects": len(inspection_results),
             "defect_types": {},
-            "max_confidence": max([d['conf'] for d in detections]) if detections else 0.0,
-            "avg_confidence": (sum([d['conf'] for d in detections]) / len(detections)) if detections else 0.0
+            "verdict_counts": {"OK": 0, "NG": 0},
+            "system_verdict": "OK",
+            "primary_defect": None  # Defect with highest confidence if NG
         }
-        for d in detections:
-            t = d.get('class_name')
-            t_vi = self.class_names_vi.get(d.get('class_id'), t)
-            # ensure detection contains class_name_vi and confidence keys for client
-            d['class_name_vi'] = t_vi
-            d['confidence'] = d.get('conf', 0.0)
-            stats['defect_types'][t_vi] = stats['defect_types'].get(t_vi, 0) + 1
+        
+        # Determine system verdict (NG if any defect is NG)
+        ng_defects = [r for r in inspection_results if r.verdict == "NG"]
+        if ng_defects:
+            stats["system_verdict"] = "NG"
+            # Find defect with highest confidence among NG defects
+            primary = max(ng_defects, key=lambda r: r.detection.conf)
+            vn_name = self.class_names_vi.get(primary.detection.class_name, primary.detection.class_name)
+            stats["primary_defect"] = {
+                "class_name": primary.detection.class_name,
+                "class_name_vi": vn_name,
+                "confidence": primary.detection.conf,
+                "reason_code": primary.reason_code,
+                "reason_text": primary.reason_text
+            }
+            
+        annotated_image = image.copy()
+        
+        for idx, res in enumerate(inspection_results):
+            det = res.detection
+            
+            # 1. Update Stats
+            vn_name = self.class_names_vi.get(det.class_name, det.class_name)
+            stats["defect_types"][vn_name] = stats["defect_types"].get(vn_name, 0) + 1
+            stats["verdict_counts"][res.verdict] = stats["verdict_counts"].get(res.verdict, 0) + 1
+            
+            # 2. Format DTO (Data Transfer Object)
+            # Map back to what Frontend expects: class_id, class_name, conf, polygon
+            d_dict = {
+                "class_id": det.cls_id,  # Use cls_id from Detection dataclass
+                "class_name": det.class_name,
+                "class_name_vi": vn_name,
+                "confidence": det.conf,
+                "polygon": det.poly.tolist(), # List of [x, y]
+                # New fields from advanced logic
+                "verdict": res.verdict,
+                "reason_code": res.reason_code,
+                "reason_text": res.reason_text,
+                "measurements": res.measurements
+            }
+            detections_out.append(d_dict)
+            
+            # 3. Draw on image
+            color = (0, 0, 255) if res.verdict == "NG" else (0, 255, 0) # Red for NG, Green for OK
+            
+            # Draw bbox/poly
+            pts = det.poly.reshape((-1, 1, 2)).astype(np.int32)
+            cv2.polylines(annotated_image, [pts], True, color, 2)
+            
+            # Draw Label
+            label = f"{idx+1}.{vn_name} [{res.verdict}]"
+            x, y = pts[0][0]
+            cv2.putText(annotated_image, label, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
-        return detections, annotated_image, stats
-
-# Initialize AI service
-MODEL_PATH = r"C:\Users\sonng\Code\APPAutoVRS\BE-AutoVRS\models\multi.onnx"
-ai_service = AIDetectionService(MODEL_PATH)
+        return detections_out, annotated_image, stats
 
 # ===============================
-# FastAPI endpoints
+# Initialize Service
+# ===============================
+ai_service = AdvancedAIService()
+
+# ===============================
+# Endpoints
 # ===============================
 @app.on_event("startup")
 async def startup_event():
-    logger.info("🚀 AutoVRS AI Detection API started")
+    logger.info("🚀 AutoVRS Advanced AI API started")
+    if ai_service.pipeline is None:
+        logger.warning("⚠️ Pipeline did not initialize correctly. Check logs/paths.")
 
 @app.get("/")
 async def root():
     return {
-        "message": "AutoVRS AI Detection API",
-        "version": "1.0.0",
-        "model_loaded": ai_service.model is not None,
-        "endpoints": ["/api/ai-detection", "/health"]
+        "message": "AutoVRS Advanced AI Detection API",
+        "version": "2.0.0",
+        "model_loaded": ai_service.pipeline is not None,
+        "mode": "Advanced Inspection Pipeline"
     }
 
 @app.get("/health")
 async def health_check():
     return {
         "status": "healthy",
-        "model_loaded": ai_service.model is not None,
+        "model_loaded": ai_service.pipeline is not None,
         "timestamp": datetime.now().isoformat()
     }
 
 @app.post("/api/ai-detection", response_model=DetectionResult)
 async def ai_detection(request: DetectionRequest):
     try:
-        # ===============================
+        if ai_service.pipeline is None:
+             raise HTTPException(status_code=503, detail="AI Model not initialized")
+             
         # 1. Preprocess
-        # ===============================
         image = ai_service.preprocess_image(request.image_base64)
 
-        # ===============================
-        # 2. Save input image
-        # ===============================
-        input_folder = r"C:\Users\sonng\Code\APPAutoVRS\BE-AutoVRS\Image_input"
-        input_image_path, input_filename = ai_service.save_image(image, input_folder, "ai_input")
+        # 2. Save Input
+        input_folder = r"BE-AutoVRS\Image_input"
+        input_path, input_filename = ai_service.save_image(image, input_folder, "ai_input")
 
-        # ===============================
-        # 3. Run inference
-        # ===============================
-        detections, annotated_image, stats = ai_service.run_inference(
-            input_image_path, request.confidence_threshold, request.iou_threshold
-        )
+        # 3. Run Pipeline Inference
+        # Pipeline takes generic BGR image
+        # Note: pipeline.inspect() returns List[InspectionResult]
+        inspection_results = ai_service.pipeline.inspect(image, use_sam=True)
+        
+        # 3.5. Filter to show only highest confidence defect
+        if inspection_results:
+            # Sort by confidence (highest first)
+            inspection_results_sorted = sorted(
+                inspection_results, 
+                key=lambda r: r.detection.conf, 
+                reverse=True
+            )
+            # Keep only top 1 (highest confidence)
+            inspection_results = [inspection_results_sorted[0]]
+            logger.info(f"📊 Filtered to top 1 defect: {inspection_results[0].detection.class_name} "
+                       f"(conf={inspection_results[0].detection.conf:.3f})")
 
-        # ===============================
-        # 4. Save annotated image
-        # ===============================
-        output_folder = r"C:\Users\sonng\Code\APPAutoVRS\BE-AutoVRS\Image_output"
-        output_image_path, processed_filename = ai_service.save_image(annotated_image, output_folder, "ai_processed")
+        # 4. Format Results & Draw
+        detections, annotated_image, stats = ai_service.format_results(inspection_results, image)
 
-        # Encode to base64
+        # 5. Save Output
+        output_folder = r"BE-AutoVRS\Image_output"
+        output_path, output_filename = ai_service.save_image(annotated_image, output_folder, "ai_processed")
+
+        # 6. Encode Response
         result_image_base64 = ai_service.encode_image_to_base64(annotated_image)
+        
+        # Create summary message
+        sys_verdict = stats.get("system_verdict", "OK")
+        defect_count = stats.get("total_defects", 0)
+        
+        # Include primary defect name in message if NG
+        if sys_verdict == "NG" and stats.get("primary_defect"):
+            primary = stats["primary_defect"]
+            defect_name = primary["class_name_vi"]
+            confidence = primary["confidence"]
+            msg = f"Inspection: {sys_verdict} - {defect_name} (Conf: {confidence:.2%}). Total: {defect_count} defects."
+        else:
+            msg = f"Inspection Completed: {sys_verdict}. Found {defect_count} items."
 
         return DetectionResult(
             success=True,
-            message=f"Detection completed successfully. Found {len(detections)} defects. Images saved: {input_filename} → {processed_filename}",
+            message=msg,
             detections=detections,
             processed_image_base64=result_image_base64,
             statistics=stats,
@@ -316,16 +304,11 @@ async def ai_detection(request: DetectionRequest):
         )
 
     except Exception as e:
-        # log full traceback to server log (use logger.exception to include stacktrace)
         logger.exception(f"❌ Detection failed: {e}")
-        logger.debug(traceback.format_exc()) # type: ignore
-        # keep HTTP 500 response but avoid exposing stacktrace in response
-        raise HTTPException(status_code=500, detail="Detection failed (check server logs for details)")
-# ...existing code...
+        logger.debug(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
 
-# ===============================
-# Run server
-# ===============================
 if __name__ == "__main__":
-    import uvicorn # type: ignore
+    import uvicorn
+    # Use config_ai or hardcoded port if needed
     uvicorn.run(app, host="0.0.0.0", port=8082, log_level="info")

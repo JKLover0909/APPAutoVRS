@@ -5,9 +5,10 @@ import 'package:flutter_feather_icons/flutter_feather_icons.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../services/autovrs_websocket_service.dart';
-import '../../services/video_frame_service.dart';
+// import '../../services/video_frame_service.dart'; // Disabled - using AutoVRSWebSocketService
 import '../../services/ai_detection_service.dart';
 import '../../services/qcamber_gerber_service.dart';
+import '../../services/coord_ws_client.dart';
 import '../../providers/vrs_provider.dart';
 import '../../main.dart';
 import '../../widgets/defect_list_widget.dart';
@@ -22,7 +23,8 @@ class ManualVRSScreen extends StatefulWidget {
 }
 
 class _ManualVRSScreenState extends State<ManualVRSScreen> {
-  double _magnification = 100;
+  String _selectedResolution = 'Full HD'; // VGA, HD, Full HD, 2K
+  final double _magnification = 100; // Keep for InteractiveViewer zoom
   // index in _defects (0-based). If no defects, stays at 0.
   int _currentDefectIndex = 0;
   List<Map<String, dynamic>> _defects = [];
@@ -32,9 +34,14 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
 
   // Streamlined state management for capture + AI detection
   late AIDetectionService _aiDetectionService;
-  late VideoFrameService _videoFrameService;
+  // VideoFrameService disabled - using AutoVRSWebSocketService for SICK camera (port 8999)
+  // late VideoFrameService _videoFrameService;
   late QCamberGerberService _gerberService;
+  final CoordWsClient _coordClient = CoordWsClient();
   final int _selectedVideoSource = 0; // 0: AutoVRS, 1: Video Stream
+
+  // Camera movement state
+  bool _isSendingCoords = false;
 
   // Capture state management
   bool _isAnalyzing = false;
@@ -54,7 +61,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
 
     // Initialize AI Detection Service
     _aiDetectionService = AIDetectionService();
-    _videoFrameService = VideoFrameService();
+    // _videoFrameService = VideoFrameService(); // Disabled
     _gerberService = context.read<QCamberGerberService>();
 
     // Kết nối AutoVRS WebSocket khi khởi tạo màn hình
@@ -65,6 +72,11 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
         listen: false,
       );
       _connectToBackend(webSocketService);
+
+      // Connect to coordinator WebSocket for sending coordinates
+      _coordClient.connect().catchError((e) {
+        debugPrint('⚠️ Failed to connect to coordinator WebSocket: $e');
+      });
 
       // Auto load Gerber and AOI for first defect if available
       if (_defects.isNotEmpty) {
@@ -82,7 +94,10 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
     final board = vrsProvider.currentBoard;
     if (board != _currentBoardId) {
       _currentBoardId = board;
-      _loadDefectsForBoard(board);
+      // Use post-frame callback to avoid calling setState during build
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadDefectsForBoard(board);
+      });
     }
   }
 
@@ -94,7 +109,10 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
         _defects = [];
         _currentDefectIndex = 0;
       });
-      _gerberService.clearImage();
+      // Schedule clearImage after build to avoid setState during build
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _gerberService.clearImage();
+      });
       return;
     }
 
@@ -127,6 +145,186 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
     } catch (e) {
       debugPrint('Connection error: $e');
     }
+  }
+
+  Future<void> _moveCameraToHome() async {
+    setState(() => _isSendingCoords = true);
+
+    try {
+      final boardId = int.tryParse(_currentBoardId ?? '0') ?? 0;
+      final defectId = 0; // Home position
+
+      debugPrint('📤 Sending HOME coords (0, 0) to PLC system');
+
+      // Send home coordinates (0, 0) via WebSocket
+      _coordClient.sendCoords(
+        boardId: boardId,
+        defectId: defectId,
+        x: 0.0,
+        y: 0.0,
+      );
+
+      if (!mounted) return;
+
+      setState(() => _isSendingCoords = false);
+
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        const SnackBar(
+          content: Text('✅ Đã gửi lệnh về gốc (0, 0) đến hệ thống PLC'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      debugPrint('✅ Home coordinates sent successfully');
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSendingCoords = false);
+
+        scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text('❌ Lỗi gửi lệnh về gốc: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      debugPrint('❌ Error sending home coordinates: $e');
+    }
+  }
+
+  Future<void> _moveCameraToDefect() async {
+    if (_defects.isEmpty || _currentDefectIndex >= _defects.length) {
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        const SnackBar(
+          content: Text('Không có lỗi để di chuyển đến'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSendingCoords = true);
+
+    try {
+      final defect = _defects[_currentDefectIndex];
+
+      // Extract PLC coordinates (already scaled)
+      double x = 0.0, y = 0.0;
+      final plcCoordStr = defect['plc_coor'] as String?;
+
+      if (plcCoordStr != null && plcCoordStr.isNotEmpty) {
+        try {
+          // Parse plc_coor format: "19.887;5.86" (semicolon separator)
+          if (plcCoordStr.contains(';')) {
+            final parts = plcCoordStr.split(';');
+            if (parts.length >= 2) {
+              x = double.tryParse(parts[0].trim()) ?? 0.0;
+              y = double.tryParse(parts[1].trim()) ?? 0.0;
+            }
+          }
+        } catch (e) {
+          debugPrint('⚠️ Failed to parse plc_coor: $e');
+        }
+      }
+
+      if (x == 0.0 && y == 0.0) {
+        throw Exception('Tọa độ lỗi không hợp lệ (0,0)');
+      }
+
+      final boardId = int.tryParse(_currentBoardId ?? '0') ?? 0;
+      final defectId = defect['id'] ?? 0;
+
+      debugPrint(
+        '📤 Sending coords to operator: board=$boardId, defect=$defectId, x=$x, y=$y',
+      );
+
+      // Send coordinates via WebSocket to operator/PLC system
+      _coordClient.sendCoords(boardId: boardId, defectId: defectId, x: x, y: y);
+
+      if (!mounted) return;
+
+      setState(() => _isSendingCoords = false);
+
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text('✅ Đã gửi tọa độ ($x, $y) đến hệ thống PLC'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+
+      debugPrint('✅ Coordinates sent successfully');
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSendingCoords = false);
+
+        scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text('❌ Lỗi gửi tọa độ: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      debugPrint('❌ Error sending coordinates: $e');
+    }
+  }
+
+  void _changeResolution(String resolution) {
+    int width, height;
+
+    switch (resolution) {
+      case 'VGA':
+        width = 640;
+        height = 480;
+        break;
+      case 'HD':
+        width = 1280;
+        height = 720;
+        break;
+      case 'Full HD':
+        width = 1920;
+        height = 1080;
+        break;
+      case '2K':
+        width = 2560;
+        height = 1440;
+        break;
+      case '4K':
+        width = 3840;
+        height = 2160;
+        break;
+      case '20MP':
+        width = 5472;
+        height = 3648;
+        break;
+      default:
+        width = 1920;
+        height = 1080;
+    }
+
+    setState(() => _selectedResolution = resolution);
+
+    // Send resolution change to backend via WebSocket
+    final webSocketService = Provider.of<AutoVRSWebSocketService>(
+      context,
+      listen: false,
+    );
+
+    webSocketService.sendResolutionChange(width, height);
+
+    debugPrint('📐 Resolution changed to $resolution (${width}x$height)');
+
+    scaffoldMessengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Text(
+          '✅ Đã thay đổi độ phân giải: $resolution (${width}x$height)',
+        ),
+        backgroundColor: Colors.blue,
+        duration: const Duration(seconds: 1),
+      ),
+    );
   }
 
   Future<void> _captureAndAnalyze() async {
@@ -178,9 +376,8 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
           filename: filename,
           enableDetection: true,
         );
-      } else {
-        // Video Frame Service
-        currentFrame = _videoFrameService.currentFrame;
+        // Get current frame from AutoVRS WebSocket service
+        currentFrame = webSocketService.currentFrame;
       }
 
       if (currentFrame == null) {
@@ -225,7 +422,8 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
   @override
   void dispose() {
     _aiDetectionService.dispose();
-    _videoFrameService.dispose();
+    // _videoFrameService.dispose(); // Disabled - using AutoVRSWebSocketService
+    _coordClient.disconnect();
     super.dispose();
   }
 
@@ -709,15 +907,8 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                                                         8,
                                                                       ),
                                                                 ),
-                                                                child: Text(
-                                                                  'Frame: ${webSocketService.frameCount}',
-                                                                  style: const TextStyle(
-                                                                    color: Colors
-                                                                        .white,
-                                                                    fontSize:
-                                                                        12,
-                                                                  ),
-                                                                ),
+                                                                child:
+                                                                    const SizedBox.shrink(), // Ẩn Frame count
                                                               );
                                                             },
                                                       ),
@@ -869,22 +1060,23 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                 // Info rows
                                 _buildInfoRow(
                                   'Mã Lô:',
-                                  vrsProvider.currentLot != null &&
-                                          vrsProvider.currentLot!.isNotEmpty
-                                      ? vrsProvider.currentLot!
+                                  vrsProvider.currentLot.isNotEmpty
+                                      ? vrsProvider.currentLot
                                       : 'Chưa có',
                                 ),
                                 const SizedBox(height: 12),
                                 _buildInfoRow(
                                   'Số thứ tự bo (Id_board):',
-                                  vrsProvider.currentBoarBoard!.isNotEmpty
-                                     ? vrsProvider.currentBoard!
-                                     : 'Chưa có',
+                                  vrsProvider.currentBoard.isNotEmpty
+                                      ? vrsProvider.currentBoard
+                                      : 'Chưa có',
                                 ),
                                 const SizedBox(height: 12),
                                 _buildInfoRow(
                                   'Loại lỗi AI dự đoán:',
-                                  _getA             const Sizedox(height: 16),
+                                  _getAIPredictionText(),
+                                ),
+                                const SizedBox(height: 16),
 
                                 // Defect list for curret board
                                 DefectListWidget(
@@ -897,86 +1089,47 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
 
                                 const SizedBox(height: 12),
 
-                                // Magnification Slider
+                                // Resolution Selection
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        const Text(
-                                          'Độ phóng đại',
-                                          style: TextStyle(fontSize: 14),
-                                        ),
-                                        Row(
-                                          children: [
-                                            Text(
-                                              '${_magnification.round()}%',
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            // Reset zoom button
-                                            InkWell(
-                                              onTap: () {
-                                                setState(() {
-                                                  _magnification = 100;
-                                                });
-                                                debugPrint(
-                                                  '🔍 Zoom reset to 100%',
-                                                );
-                                              },
-                                              child: Container(
-                                                padding: const EdgeInsets.all(
-                                                  4,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.grey
-                                                      .withOpacity(0.2),
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                ),
-                                                child: const Icon(
-                                                  Icons.center_focus_strong,
-                                                  size: 16,
-                                                  color: Colors.grey,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
+                                    const Text(
+                                      'Độ phân giải',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                     const SizedBox(height: 8),
-                                    SliderTheme(
-                                      data: SliderTheme.of(context).copyWith(
-                                        activeTrackColor: Colors.blue,
-                                        inactiveTrackColor: Colors.grey
-                                            .withOpacity(0.3),
-                                        thumbColor: Colors.blue,
-                                        overlayColor: Colors.blue.withOpacity(
-                                          0.2,
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: [
+                                        _buildResolutionButton(
+                                          'VGA',
+                                          '640x480',
                                         ),
-                                        trackHeight: 4,
-                                      ),
-                                      child: Slider(
-                                        value: _magnification,
-                                        min: 50,
-                                        max: 300,
-                                        divisions: 50,
-                                        label: '${_magnification.round()}%',
-                                        onChanged: (value) {
-                                          setState(
-                                            () => _magnification = value,
-                                          );
-                                          debugPrint(
-                                            '🔍 Zoom level changed to: ${_magnification.round()}%',
-                                          );
-                                        },
-                                      ),
+                                        _buildResolutionButton(
+                                          'HD',
+                                          '1280x720',
+                                        ),
+                                        _buildResolutionButton(
+                                          'Full HD',
+                                          '1920x1080',
+                                        ),
+                                        _buildResolutionButton(
+                                          '2K',
+                                          '2560x1440',
+                                        ),
+                                        _buildResolutionButton(
+                                          '4K',
+                                          '3840x2160',
+                                        ),
+                                        _buildResolutionButton(
+                                          '20MP',
+                                          '5472x3648',
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
@@ -1012,6 +1165,86 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                 if (!_hasAnalysisResult &&
                                     !webSocketService
                                         .isViewingCapturedImage) ...[
+                                  // Camera movement buttons
+                                  Row(
+                                    children: [
+                                      // Về gốc button
+                                      Expanded(
+                                        child: ElevatedButton.icon(
+                                          onPressed: _isSendingCoords
+                                              ? null
+                                              : _moveCameraToHome,
+                                          icon: _isSendingCoords
+                                              ? const SizedBox(
+                                                  width: 16,
+                                                  height: 16,
+                                                  child: CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    valueColor:
+                                                        AlwaysStoppedAnimation<
+                                                          Color
+                                                        >(Colors.white),
+                                                  ),
+                                                )
+                                              : const Icon(
+                                                  FeatherIcons.home,
+                                                  size: 16,
+                                                ),
+                                          label: Text(
+                                            _isSendingCoords
+                                                ? 'Đang gửi...'
+                                                : 'Về gốc',
+                                          ),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.blueGrey,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 12,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      // Di chuyển Camera button
+                                      Expanded(
+                                        child: ElevatedButton.icon(
+                                          onPressed: _isSendingCoords
+                                              ? null
+                                              : _moveCameraToDefect,
+                                          icon: _isSendingCoords
+                                              ? const SizedBox(
+                                                  width: 16,
+                                                  height: 16,
+                                                  child: CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    valueColor:
+                                                        AlwaysStoppedAnimation<
+                                                          Color
+                                                        >(Colors.white),
+                                                  ),
+                                                )
+                                              : const Icon(
+                                                  FeatherIcons.navigation,
+                                                  size: 16,
+                                                ),
+                                          label: Text(
+                                            _isSendingCoords
+                                                ? 'Đang gửi...'
+                                                : 'Di chuyển Camera',
+                                          ),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.orange,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 12,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  // Chụp lại button
                                   Row(
                                     children: [
                                       Expanded(
@@ -1341,7 +1574,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
         modelName: model['name'] ?? 'Model_${model['id_model']}',
         coordinates: coordinates,
         defectType: defect['type'],
-        layerName: 'l2', // Fixed layer name
+        layerName: 'l1', // Changed from l2 to l1
         zoom: 128.0, // Fixed zoom level
       );
 
@@ -1406,65 +1639,74 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
     }
 
     // Persist judgment to DB for the current defect
-    try {
-      if (_defects.isNotEmpty &&
-          _currentDefectIndex >= 0 &&
-          _currentDefectIndex < _defects.length) {
-        final current = _defects[_currentDefectIndex];
-        final dynamic rawId =
-            current['id'] ?? current['id_defect'] ?? current['defect_id'];
-        final int? id = rawId is int
-            ? rawId
-            : int.tryParse(rawId?.toString() ?? '');
-        if (id != null) {
-          // Determine detected type from latest analysis if available
-          String detectedType = '';
-          if (_analysisResult != null &&
-              _analysisResult!.detections.isNotEmpty) {
-            final first = _analysisResult!.detections.first;
-            detectedType = first.classNameVi.isNotEmpty
-                ? first.classNameVi
-                : (first.className.isNotEmpty ? first.className : '');
-          }
+    if (_defects.isNotEmpty &&
+        _currentDefectIndex >= 0 &&
+        _currentDefectIndex < _defects.length) {
+      final current = _defects[_currentDefectIndex];
+      final dynamic rawId =
+          current['id'] ?? current['id_defect'] ?? current['defect_id'];
+      final int? id = rawId is int
+          ? rawId
+          : int.tryParse(rawId?.toString() ?? '');
 
-          await _db.updateDefect(id, {
-            'time': DateTime.now().toIso8601String(),
-            'type': detectedType,
-            'judgement': result,
-          });
-
-          // Update in-memory and reload from DB
-          setState(() {
-            current['type'] = detectedType;
-            current['judgement'] = result;
-            current['time'] = DateTime.now().toIso8601String();
-            _defectListReloadToken++;
-          });
-
-          // Reload list from DB so DefectListWidget shows persisted data
-          await _loadDefectsForBoard(_currentBoardId);
-          // Reset local analysis/selection and return to live camera for next defect
-          if (!mounted) return;
-          setState(() {
-            _pendingJudgement = null;
-            _analysisResult = null;
-            _hasAnalysisResult = false;
-          });
-          final webSocketService = Provider.of<AutoVRSWebSocketService>(
-            context,
-            listen: false,
-          );
-          webSocketService.returnToLiveCamera();
+      if (id != null) {
+        // Determine detected type from latest analysis if available
+        String detectedType = '';
+        if (_analysisResult != null && _analysisResult!.detections.isNotEmpty) {
+          final first = _analysisResult!.detections.first;
+          detectedType = first.classNameVi.isNotEmpty
+              ? first.classNameVi
+              : (first.className.isNotEmpty ? first.className : '');
         }
+
+        // Update database (no error handling - let retry logic in service handle it)
+        final rowsAffected = await _db.updateDefect(id, {
+          'time': DateTime.now().toIso8601String(),
+          'type': detectedType,
+          'judgement': result,
+        });
+
+        debugPrint(
+          '✅ Judgment persisted: defect_id=$id, result=$result, rows=$rowsAffected',
+        );
+
+        // Reload list from DB to show updated data (this will update in-memory list)
+        setState(() {
+          _defectListReloadToken++;
+        });
+
+        try {
+          await _loadDefectsForBoard(_currentBoardId);
+          debugPrint('✅ Defect list reloaded from database');
+        } catch (reloadError) {
+          debugPrint('⚠️ Failed to reload defect list: $reloadError');
+          // Don't show error to user - data is already saved
+        }
+
+        // Show success message
+        if (mounted) {
+          scaffoldMessengerKey.currentState?.showSnackBar(
+            SnackBar(
+              content: Text('✓ Đã lưu phán định: $result'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+
+        // Reset local analysis/selection and return to live camera for next defect
+        if (!mounted) return;
+        setState(() {
+          _pendingJudgement = null;
+          _analysisResult = null;
+          _hasAnalysisResult = false;
+        });
+        final webSocketService = Provider.of<AutoVRSWebSocketService>(
+          context,
+          listen: false,
+        );
+        webSocketService.returnToLiveCamera();
       }
-    } catch (e) {
-      debugPrint('Failed to persist judgment: $e');
-      scaffoldMessengerKey.currentState?.showSnackBar(
-        SnackBar(
-          content: Text('Lỗi lưu phán định: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
     }
   }
 
@@ -1631,6 +1873,33 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
   /// Chuyển đổi tên lỗi kỹ thuật sang tên hiển thị
   String _getDefectDisplayName(String technicalName) {
     switch (technicalName.toLowerCase()) {
+      case 'bamdinhkhongtot':
+        return 'Bám Dính Không Tốt';
+      case 'chamkim':
+        return 'Châm Kim';
+      case 'divat':
+        return 'Dị vật';
+      case 'divatduongmach':
+        return 'Dị vật đường mạch';
+      case 'khuyetmach':
+        return 'Khuyết mạch';
+      case 'nganmach':
+        return 'Ngắn Mạch';
+      case 'thieudong':
+        return 'Thiếu Đồng';
+      case 'thieudongduongmach':
+        return 'Thiếu Đồng Đường Mạch';
+      case 'thuadong':
+        return 'Thừa Đồng';
+      case 'thuadongduongmach':
+        return 'Thừa Đồng Đường Mạch';
+      case 'vetlom':
+        return 'Vết Lõm';
+      case 'xuoc':
+        return 'Xước';
+      case 'other':
+        return 'Khác';
+      // Legacy names for backward compatibility
       case 'short_circuit':
         return 'Chập mạch';
       case 'missing_component':
@@ -1785,6 +2054,46 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
             style: TextStyle(fontSize: 12, color: Colors.grey[600]),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildResolutionButton(String label, String resolution) {
+    final isSelected = _selectedResolution == label;
+
+    return InkWell(
+      onTap: () => _changeResolution(label),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.blue : Colors.grey.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? Colors.blue : Colors.grey.withOpacity(0.3),
+            width: 1.5,
+          ),
+        ),
+        child: Column(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: isSelected ? Colors.white : Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              resolution,
+              style: TextStyle(
+                fontSize: 10,
+                color: isSelected ? Colors.white70 : Colors.grey,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -11,7 +11,7 @@ import 'providers/navigation_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/vrs_provider.dart';
 import 'providers/statistics_provider.dart';
-import 'services/flutter_camera_service.dart';
+// FlutterCameraService removed - using AutoVRSWebSocketService for SICK camera
 import 'services/autovrs_websocket_service.dart';
 import 'services/ai_detection_service.dart';
 import 'services/local_database_service.dart';
@@ -87,11 +87,11 @@ class _AutoVRSAppState extends State<AutoVRSApp> {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => VRSProvider()),
         ChangeNotifierProvider(create: (_) => StatisticsProvider()),
-        ChangeNotifierProvider(create: (_) => FlutterCameraService()),
+        // FlutterCameraService removed - using AutoVRSWebSocketService for SICK camera
         ChangeNotifierProvider(
           create: (_) {
             final svc = AutoVRSWebSocketService();
-            // Attempt to connect in background when the app starts
+            // Auto-connect to SICK camera (port 8999) when app starts
             svc.connect();
             return svc;
           },

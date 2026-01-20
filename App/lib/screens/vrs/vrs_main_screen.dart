@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/vrs_provider.dart';
 // import '../../services/autovrs_websocket_service.dart';
-import 'manual_vrs_screen.dart';
 import '../../widgets/defect_list_widget.dart';
 import '../../widgets/gerber_image_widget.dart';
 import '../../services/local_database_service.dart';
@@ -16,9 +15,36 @@ import '../../services/ai_detection_service.dart';
 import '../../services/autovrs_websocket_service.dart';
 import '../../services/qcamber_gerber_service.dart';
 
-// Map technical defect names to display names (same logic as ManualVRSScreen)
+// Map technical defect names to display names (updated for new AI models)
 String _getDefectDisplayName(String technicalName) {
   switch (technicalName.toLowerCase()) {
+    case 'bamdinhkhongtot':
+      return 'Bám Dính Không Tốt';
+    case 'chamkim':
+      return 'Châm Kim';
+    case 'divat':
+      return 'Dị vật';
+    case 'divatduongmach':
+      return 'Dị vật đường mạch';
+    case 'khuyetmach':
+      return 'Khuyết mạch';
+    case 'nganmach':
+      return 'Ngắn Mạch';
+    case 'thieudong':
+      return 'Thiếu Đồng';
+    case 'thieudongduongmach':
+      return 'Thiếu Đồng Đường Mạch';
+    case 'thuadong':
+      return 'Thừa Đồng';
+    case 'thuadongduongmach':
+      return 'Thừa Đồng Đường Mạch';
+    case 'vetlom':
+      return 'Vết Lõm';
+    case 'xuoc':
+      return 'Xước';
+    case 'other':
+      return 'Khác';
+    // Legacy names for backward compatibility
     case 'short_circuit':
       return 'Chập mạch';
     case 'missing_component':
@@ -367,68 +393,56 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
       num x = 0;
       num y = 0;
 
-      final coords = current['coordinates'];
-      if (coords != null) {
-        if (coords is String) {
-          debugPrint('VRSMainScreen: raw coords string found: $coords');
-          // Send raw string coordinates as requested (e.g. "4.0,4.0")
+      // Use plc_coor column for PLC movement (already scaled)
+      final plcCoords = current['plc_coor'];
+      if (plcCoords != null) {
+        if (plcCoords is String) {
+          debugPrint('VRSMainScreen: raw plc_coor string found: $plcCoords');
+          // Send raw string plc coordinates (e.g. "19.887;5.86")
           if (boardId != null && defectId != null) {
             debugPrint(
-              'VRSMainScreen: sending raw coords string for defect $defectId (index=$idx)',
+              'VRSMainScreen: sending raw plc_coor string for defect $defectId (index=$idx)',
             );
             _coordClient.sendCoordsString(
               boardId: boardId,
               defectId: defectId,
-              coords: coords,
+              coords: plcCoords,
             );
             return;
           } else {
             debugPrint(
-              'VRSMainScreen: cannot send raw coords string - missing ids (index=$idx)',
+              'VRSMainScreen: cannot send raw plc_coor string - missing ids (index=$idx)',
             );
           }
         }
         // Otherwise fallthrough to numeric parsing
-        if (coords is String) {
-          // Try JSON first
+        if (plcCoords is String) {
+          // Parse plc_coor format: "19.887;5.86" (semicolon separator)
           try {
-            final decoded = jsonDecode(coords) as Map<String, dynamic>;
-            x = (decoded['x'] ?? 0) is num
-                ? decoded['x'] as num
-                : double.tryParse('${decoded['x']}') ?? 0;
-            y = (decoded['y'] ?? 0) is num
-                ? decoded['y'] as num
-                : double.tryParse('${decoded['y']}') ?? 0;
-          } catch (_) {
-            // Fallback simple parser for 'x:100,y:200' or '100,200'
-            try {
-              if (coords.contains(':')) {
-                final parts = coords.split(',');
-                for (var p in parts) {
-                  final kv = p.split(':');
-                  if (kv.length == 2) {
-                    final key = kv[0].trim();
-                    final val = double.tryParse(kv[1].trim()) ?? 0;
-                    if (key == 'x') x = val;
-                    if (key == 'y') y = val;
-                  }
-                }
-              } else {
-                final parts = coords.split(',');
-                if (parts.length >= 2) {
-                  x = double.tryParse(parts[0].trim()) ?? 0;
-                  y = double.tryParse(parts[1].trim()) ?? 0;
-                }
+            if (plcCoords.contains(';')) {
+              final parts = plcCoords.split(';');
+              if (parts.length >= 2) {
+                x = double.tryParse(parts[0].trim()) ?? 0;
+                y = double.tryParse(parts[1].trim()) ?? 0;
               }
-            } catch (_) {}
+            } else if (plcCoords.contains(',')) {
+              // Fallback for comma separator
+              final parts = plcCoords.split(',');
+              if (parts.length >= 2) {
+                x = double.tryParse(parts[0].trim()) ?? 0;
+                y = double.tryParse(parts[1].trim()) ?? 0;
+              }
+            }
+          } catch (e) {
+            debugPrint('Failed to parse plc_coor: $e');
           }
-        } else if (coords is Map) {
-          x = (coords['x'] ?? 0) is num
-              ? coords['x'] as num
-              : double.tryParse('${coords['x']}') ?? 0;
-          y = (coords['y'] ?? 0) is num
-              ? coords['y'] as num
-              : double.tryParse('${coords['y']}') ?? 0;
+        } else if (plcCoords is Map) {
+          x = (plcCoords['x'] ?? 0) is num
+              ? plcCoords['x'] as num
+              : double.tryParse('${plcCoords['x']}') ?? 0;
+          y = (plcCoords['y'] ?? 0) is num
+              ? plcCoords['y'] as num
+              : double.tryParse('${plcCoords['y']}') ?? 0;
         }
       }
 
@@ -501,19 +515,83 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
 
         String aiText = 'Không phát hiện lỗi';
         final analysis = webSocketService.lastAnalysis;
-        if (analysis != null) {
-          if (analysis['defects_by_type'] != null &&
-              analysis['defects_by_type'] is Map) {
-            final Map defects = analysis['defects_by_type'] as Map;
-            if (defects.keys.isNotEmpty) {
-              aiText = defects.keys
-                  .map((k) => _getDefectDisplayName(k.toString()))
-                  .join(', ');
+        final detectionResults = webSocketService.lastDetectionResults;
+
+        // DEBUG: Log raw data
+        debugPrint('🔍 VRSMain aiText calculation:');
+        debugPrint(
+          '  detectionResults: ${detectionResults != null ? 'EXISTS' : 'NULL'}',
+        );
+        debugPrint('  analysis: ${analysis != null ? 'EXISTS' : 'NULL'}');
+
+        // Ưu tiên lấy từ lastDetectionResults vì có class_name_vi
+        if (detectionResults != null && detectionResults.isNotEmpty) {
+          // lastDetectionResults là Map, cần lấy 'detections' array bên trong
+          final detections = detectionResults['detections'];
+          debugPrint(
+            '  detectionResults[detections]: ${detections != null ? 'List of ${(detections as List?)?.length}' : 'NULL'}',
+          );
+          if (detections != null &&
+              detections is List &&
+              detections.isNotEmpty) {
+            // Chỉ lấy lỗi có confidence cao nhất
+            var highestConfDetection = detections[0];
+            double highestConf = (highestConfDetection['confidence'] ?? 0.0)
+                .toDouble();
+
+            for (final d in detections) {
+              final conf = (d['confidence'] ?? 0.0).toDouble();
+              if (conf > highestConf) {
+                highestConf = conf;
+                highestConfDetection = d;
+              }
             }
+
+            final nameVi =
+                highestConfDetection['class_name_vi'] ??
+                highestConfDetection['className'] ??
+                'Unknown';
+            aiText = '$nameVi (${(highestConf * 100).toStringAsFixed(1)}%)';
+            debugPrint(
+              '  ✅ aiText from detectionResults (highest conf): $aiText',
+            );
+          }
+        } else if (analysis != null) {
+          // Fallback: dùng analysis nhưng lấy từ detections nếu có
+          final detections = analysis['detections'];
+          debugPrint(
+            '  analysis[detections]: ${detections != null ? 'List of ${(detections as List?)?.length}' : 'NULL'}',
+          );
+          if (detections != null &&
+              detections is List &&
+              detections.isNotEmpty) {
+            // Chỉ lấy lỗi có confidence cao nhất từ analysis
+            var highestConfDetection = detections[0];
+            double highestConf = (highestConfDetection['confidence'] ?? 0.0)
+                .toDouble();
+
+            for (final d in detections) {
+              final conf = (d['confidence'] ?? 0.0).toDouble();
+              if (conf > highestConf) {
+                highestConf = conf;
+                highestConfDetection = d;
+              }
+            }
+
+            final nameVi =
+                highestConfDetection['class_name_vi'] ??
+                highestConfDetection['class_name'] ??
+                'Unknown';
+            final displayName = _getDefectDisplayName(nameVi.toString());
+            aiText =
+                '$displayName (${(highestConf * 100).toStringAsFixed(1)}%)';
+            debugPrint('  ✅ aiText from analysis (highest conf): $aiText');
           } else if ((analysis['total_defects'] ?? 0) > 0) {
             aiText = 'Có lỗi';
+            debugPrint('  ⚠️ aiText fallback: $aiText');
           }
         }
+        debugPrint('  FINAL aiText: $aiText');
 
         return Padding(
           padding: EdgeInsets.all(padding),
@@ -974,29 +1052,30 @@ class _VRSMainScreenState extends State<VRSMainScreen> {
 
                           // Start / Stop operator-driven workflow
                           Row(
-                                                   child: ElevatedButton(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton(
                                   onPressed:
-                                      (boardText != 'Chưa có' && !_runnin
-                                child: const Text('Bắt đầu'),g)
+                                      (boardText != 'Chưa có' && !_running)
                                       ? () {
                                           final bId = int.tryParse(boardText);
                                           if (bId != null) _startWorkflow(bId);
                                         }
-                                      ('Bắt đầu'),
+                                      : null,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.green,
-                
-                                child: const Text('Dừng'),                  ),
+                                  ),
+                                  child: const Text('Bắt đầu'),
                                 ),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: ElevatedButton(
                                   onPressed: _running ? _stopWorkflow : null,
-                                  child: const Text('Dừng'),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.red,
                                   ),
+                                  child: const Text('Dừng'),
                                 ),
                               ),
                             ],

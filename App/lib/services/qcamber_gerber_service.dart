@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 /// Lấy ảnh Gerber từ tọa độ defect
 class QCamberGerberService extends ChangeNotifier {
   static const String _baseUrl = 'http://localhost:8686';
-  static const String _defaultLayer = 'l2';
+  static const String _defaultLayer = 'l1'; // Changed from l2 to l1
   static const double _defaultZoom = 2024.0;
 
   bool _isLoading = false;
@@ -66,7 +66,7 @@ class QCamberGerberService extends ChangeNotifier {
         'layerName': layerName,
         'x': x,
         'y': y,
-        'zoom': 4048.0,
+        'zoom': 8096.0, // Doubled from 4048.0
       };
 
       debugPrint('📤 QCamber Payload: ${jsonEncode(payload)}');

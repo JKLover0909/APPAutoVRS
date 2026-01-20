@@ -167,12 +167,9 @@ class _VideoFrameWidgetState extends State<VideoFrameWidget> {
 
             const SizedBox(width: 8),
 
-            // Frame info
+            // Frame info - HIDDEN
             Expanded(
-              child: Text(
-                'Frame: ${videoService.frameId} | ${videoService.videoWidth}x${videoService.videoHeight}',
-                style: const TextStyle(color: Colors.white, fontSize: 12),
-              ),
+              child: Container(), // Ẩn frame info
             ),
 
             // Settings button
