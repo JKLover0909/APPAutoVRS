@@ -1,0 +1,15 @@
+C:/Code/APPAutoVRS/App/build/windows/x64/runner/Debug/data/icudtl.dat
+C:/Code/APPAutoVRS/App/build/windows/x64/runner/Debug/flutter_windows.dll
+C:/Code/APPAutoVRS/App/build/windows/x64/runner/Debug/file_selector_windows_plugin.dll
+C:/Code/APPAutoVRS/App/build/windows/x64/runner/Debug/data/flutter_assets/AssetManifest.bin
+C:/Code/APPAutoVRS/App/build/windows/x64/runner/Debug/data/flutter_assets/AssetManifest.json
+C:/Code/APPAutoVRS/App/build/windows/x64/runner/Debug/data/flutter_assets/assets/icons/.gitkeep
+C:/Code/APPAutoVRS/App/build/windows/x64/runner/Debug/data/flutter_assets/assets/images/.gitkeep
+C:/Code/APPAutoVRS/App/build/windows/x64/runner/Debug/data/flutter_assets/FontManifest.json
+C:/Code/APPAutoVRS/App/build/windows/x64/runner/Debug/data/flutter_assets/fonts/MaterialIcons-Regular.otf
+C:/Code/APPAutoVRS/App/build/windows/x64/runner/Debug/data/flutter_assets/kernel_blob.bin
+C:/Code/APPAutoVRS/App/build/windows/x64/runner/Debug/data/flutter_assets/NativeAssetsManifest.json
+C:/Code/APPAutoVRS/App/build/windows/x64/runner/Debug/data/flutter_assets/NOTICES.Z
+C:/Code/APPAutoVRS/App/build/windows/x64/runner/Debug/data/flutter_assets/packages/cupertino_icons/assets/CupertinoIcons.ttf
+C:/Code/APPAutoVRS/App/build/windows/x64/runner/Debug/data/flutter_assets/packages/flutter_feather_icons/fonts/feather.ttf
+C:/Code/APPAutoVRS/App/build/windows/x64/runner/Debug/data/flutter_assets/shaders/ink_sparkle.frag

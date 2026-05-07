@@ -600,20 +600,16 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                     Expanded(
                                       child: LayoutBuilder(
                                         builder: (context, constraints) {
-                                          // Calculate square size based on available space
+                                          // Use full available space to maintain camera aspect ratio
                                           final availableWidth =
                                               constraints.maxWidth;
                                           final availableHeight =
                                               constraints.maxHeight;
-                                          final squareSize =
-                                              availableWidth < availableHeight
-                                              ? availableWidth
-                                              : availableHeight;
 
                                           return Center(
                                             child: SizedBox(
-                                              width: squareSize,
-                                              height: squareSize,
+                                              width: availableWidth,
+                                              height: availableHeight,
                                               child: Container(
                                                 decoration: BoxDecoration(
                                                   color: Colors.black,
@@ -668,11 +664,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                                                   webSocketService
                                                                       .capturedImage!,
                                                                   fit: BoxFit
-                                                                      .cover,
-                                                                  width:
-                                                                      squareSize,
-                                                                  height:
-                                                                      squareSize,
+                                                                      .contain,
                                                                   gaplessPlayback:
                                                                       true,
                                                                 ),
@@ -704,11 +696,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                                                   webSocketService
                                                                       .displayImage!,
                                                                   fit: BoxFit
-                                                                      .cover,
-                                                                  width:
-                                                                      squareSize,
-                                                                  height:
-                                                                      squareSize,
+                                                                      .contain,
                                                                   gaplessPlayback:
                                                                       true, // Optimize for smooth video playback
                                                                 ),
@@ -735,11 +723,7 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                                                 child: Image.memory(
                                                                   frameData,
                                                                   fit: BoxFit
-                                                                      .cover,
-                                                                  width:
-                                                                      squareSize,
-                                                                  height:
-                                                                      squareSize,
+                                                                      .contain,
                                                                   gaplessPlayback:
                                                                       true, // Optimize for smooth video playback
                                                                 ),
@@ -990,16 +974,11 @@ class _ManualVRSScreenState extends State<ManualVRSScreen> {
                                                     constraints.maxWidth;
                                                 final availableHeight =
                                                     constraints.maxHeight;
-                                                final squareSize =
-                                                    availableWidth <
-                                                        availableHeight
-                                                    ? availableWidth
-                                                    : availableHeight;
 
                                                 return Center(
                                                   child: SizedBox(
-                                                    width: squareSize,
-                                                    height: squareSize,
+                                                    width: availableWidth,
+                                                    height: availableHeight,
                                                     child: Container(
                                                       decoration: BoxDecoration(
                                                         color: Colors

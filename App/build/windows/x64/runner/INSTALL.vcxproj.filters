@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Code\APPAutoVRS\App\build\windows\x64\CMakeFiles\8b2b6a30d6ec72030e8ffff4cf7f3ae2\INSTALL_force.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{D7BE3CD4-0BC3-398A-A002-AEEDC7EE5058}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

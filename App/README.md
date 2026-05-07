@@ -45,32 +45,62 @@ AutoVRS là một ứng dụng Flutter được thiết kế để quản lý v�
 - **Material Design 3**: Giao diện hiện đại và nhất quán
 - **Vietnamese Localization**: Hỗ trợ tiếng Việt đầy đủ
 - **Responsive Design**: Tương thích nhiều kích thước màn hình
+# Cấu trúc thư mục nguồn dự án AutoVRS
 
-## Cấu trúc dự án
+Dự án này là một ứng dụng Flutter (hiện hỗ trợ mạnh cho Desktop: Windows) với cấu trúc phân lớp dịch vụ và giao diện. 
+
+Dưới đây là một mô tả tổng quan về các thành phần cốt lõi bên trong `lib/`:
 
 ```
-lib/
-├── core/
-│   ├── app_theme.dart      # Theme và màu sắc
-│   └── routes.dart         # Cấu hình routing
-├── models/                 # Data models
-├── providers/              # State management
-│   ├── auth_provider.dart
-│   ├── navigation_provider.dart
-│   ├── vrs_provider.dart
-│   └── statistics_provider.dart
-├── screens/                # Màn hình ứng dụng
-│   ├── home_screen.dart
-│   ├── main_layout.dart
-│   ├── alignment/
-│   ├── model_management/
-│   ├── statistics/
-│   └── vrs/
-├── widgets/                # Reusable widgets
-│   ├── sidebar_navigation.dart
-│   └── password_dialog.dart
-└── main.dart              # Entry point
+
+
+c:\Code\APPAutoVRS\App\
+├── lib/
+│   ├── core/
+│   │   ├── app_theme.dart        : Thiết lập chủ đề (Theme) Sáng/Tối.
+│   │   └── routes.dart           : Định nghĩa các đường dẫn định tuyến bằng `go_router`.
+│   │
+│   ├── providers/                : Chứa các lớp State Management (Provider).
+│   │   ├── auth_provider.dart    : Trạng thái xác thực.
+│   │   ├── navigation_provider.dart : Quản lý trạng thái điều hướng (Sidebar).
+│   │   ├── statistics_provider.dart: Trạng thái cho Thống kê (NGRate, Báo cáo lỗi).
+│   │   └── vrs_provider.dart     : Xử lý trạng thái chính của quy trình VRS.
+│   │
+│   ├── screens/                  : Các màn hình giao diện (UI).
+│   │   ├── alignment/            : (Board Align Screen) Căn lấp hình ảnh thực tế với Gerber.
+│   │   ├── model_management/     : Thêm / Chọn Model bo mạch mẫu (Add/Select Model).
+│   │   ├── statistics/           : Bảng điều khiển và Thống kê (NGRate, SelectLot, Thống kê Lỗi).
+│   │   ├── vrs/                  : Cốt lõi của phần mềm - Màn hình Verify & Review System.
+│   │   │   ├── light_adjust_screen.dart : Chỉnh sáng.
+│   │   │   ├── manual_vrs_screen.dart   : Xác nhận thủ công các khu vực lỗi.
+│   │   │   └── vrs_main_screen.dart     : Màn hình kiểm tra tổng quát (Auto-run Camera).
+│   │   ├── camera_screen.dart    : Hiển thị dòng stream thuần từ camera.
+│   │   ├── home_screen.dart      : Màn hình chính sau khi khởi tạo.
+│   │   └── main_layout.dart      : Bộ khung UI dùng chung với Sidebar.
+│   │
+│   ├── services/                 : Chứa logic cốt lõi. Giao tiếp thiết bị và hệ thống bên ngoài.
+│   │   ├── ai_detection_service.dart     : Gọi API nhận diện AI (thường chạy port 8082).
+│   │   ├── autovrs_websocket_service.dart: Bắt luồng khung hình từ WebSocket SICK Camera (port 8999).
+│   │   ├── local_database_service.dart   : Quản lý SQLite CSDL Hệ thống (Model, Lot, Board, Defect).
+│   │   ├── qcamber_gerber_service.dart   : Mở, hiển thị và phân tích file Gerber.
+│   │   └── video_frame_service.dart      : Lưu lại khung hình có sự cố, xử lý binary mảng Video.
+│   │
+│   ├── widgets/                  : Các thành phần UI có thể tái sử dụng.
+│   │   ├── defect_list_widget.dart       : Thanh bên danh sách lô/board.
+│   │   ├── detection_overlay_widget.dart : Vẽ hộp Bounding Box lên trên hình.
+│   │   ├── gerber_image_widget.dart      : Kết xuất hình báo Gerber.
+│   │   └── sidebar_navigation.dart       : Cấu tạo Nav Menu chính.
+│   │
+│   └── main.dart                 : Điểm vào (Entry point) của ứng dụng Flutter.
+├── pubspec.yaml                  : Các dependency cài đặt (GoRouter, Provider, Hive, Sqflite_ffi,...).
+└── README.md
 ```
+
+## Các Dòng Chảy Chức Năng Chính
+
+* **Giao tiếp phần cứng (Camera SICK)**: Được đẩy qua WebSocket trong `autovrs_websocket_service.dart`. Các Byte ảnh JPEG từ Socket sau đó được vẽ trên App và chụp lưu lại cục bộ.
+* **Xử lý AI Detection**: Thay vì tính toán ML bên trong Flutter, hệ thống gọi HTTP Post Base64 ảnh lên AI Backend qua `ai_detection_service.dart`.
+* **Database (DB)**: Mọi log kiểm tra phân cấp Model -> Lot -> Board -> Defect được lưu vào `autovrs.db` cục bộ trong Documents của User. Logic nằm tại `local_database_service.dart`. 
 
 ## Cài đặt và chạy
 

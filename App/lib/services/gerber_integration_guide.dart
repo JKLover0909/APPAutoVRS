@@ -21,6 +21,7 @@
 ///   // ... rest of dispose
 /// }
 /// ```
+library;
 
 /// Helper function để lấy Gerber image khi chọn defect
 ///

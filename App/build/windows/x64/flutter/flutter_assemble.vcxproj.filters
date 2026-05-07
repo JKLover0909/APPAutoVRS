@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Code\APPAutoVRS\App\build\windows\x64\CMakeFiles\3ccb2393174a772fcfc960aad799dcac\flutter_windows.dll.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Code\APPAutoVRS\App\build\windows\x64\CMakeFiles\c44ff8ebfe4e4a68d7386a05e76cf0a9\flutter_assemble.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Code\APPAutoVRS\App\windows\flutter\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="C:\Code\APPAutoVRS\App\build\windows\x64\flutter\CMakeFiles\flutter_assemble" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{D7BE3CD4-0BC3-398A-A002-AEEDC7EE5058}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Code\APPAutoVRS\App\build\windows\x64\CMakeFiles\05ae30fbfa88628132bfc4582b80e1c3\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{D7BE3CD4-0BC3-398A-A002-AEEDC7EE5058}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
